@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+{% block title %}Register | Smart Campus{% endblock %}
+{% block content %}
+<section class="auth-panel">
+	<div class="mb-4"><p class="eyebrow">Join the campus</p><h1>Create your account.</h1><p class="text-secondary">Verify your email first. Admin approval unlocks student access.</p></div>
+	<form method="post" class="auth-card">
+		{% csrf_token %}
+		{% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+		{% for field in form %}<div class="mb-3"><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}{% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}</div>{% endfor %}
+		<button class="btn btn-primary btn-lg rounded-pill w-100 mt-2" type="submit">Send verification code <span aria-hidden="true">→</span></button>
+	</form>
+	<p class="mt-4 text-center text-secondary">Already registered? <a class="fw-bold" href="{% url 'accounts:login' %}">Sign in</a></p>
+</section>
+{% endblock %}

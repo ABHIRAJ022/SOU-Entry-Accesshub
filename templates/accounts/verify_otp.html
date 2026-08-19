@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+{% block title %}Verify email | Smart Campus{% endblock %}
+{% block content %}
+<section class="auth-panel">
+	<div class="mb-4"><p class="eyebrow">One last step</p><h1>Check your inbox.</h1><p class="text-secondary">Enter the six-digit code sent to <strong>{{ email }}</strong>. It expires in 10 minutes.</p></div>
+	<form method="post" class="auth-card">
+		{% csrf_token %}
+		<label class="form-label" for="{{ form.code.id_for_label }}">Verification code</label>
+		{{ form.code }}
+		{% for error in form.code.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+		<button class="btn btn-primary btn-lg rounded-pill w-100 mt-4" type="submit">Verify email <span aria-hidden="true">→</span></button>
+	</form>
+	<form method="post" action="{% url 'accounts:resend_otp' %}" class="text-center mt-3">
+		{% csrf_token %}
+		<button class="btn btn-link text-decoration-none" type="submit">Didn’t receive it? Send a new code</button>
+	</form>
+</section>
+{% endblock %}

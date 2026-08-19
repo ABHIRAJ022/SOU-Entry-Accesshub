@@ -1,0 +1,94 @@
+from django.test import Client, TestCase, override_settings
+from django.urls import reverse
+from .models import EmailOTP, User
+
+@override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
+class AuthenticationContractTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(email='student@example.com', password='StrongPassword123!', full_name='Test Student', enrollment_number='STU-001')
+        self.user.is_email_verified = True
+        self.user.save(update_fields=['is_email_verified'])
+
+    def test_student_requires_admin_approval(self):
+        response = self.client.post(reverse('accounts:login'), {'username': self.user.email, 'password': 'StrongPassword123!'})
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn('_auth_user_id', self.client.session)
+
+    def test_student_can_login_after_approval(self):
+        self.user.is_approved_by_admin = True
+        self.user.save(update_fields=['is_approved_by_admin'])
+        response = self.client.post(reverse('accounts:login'), {'username': self.user.email, 'password': 'StrongPassword123!'})
+        self.assertRedirects(response, reverse('dashboard:home'))
+
+    def test_https_localhost_origin_is_trusted_for_login(self):
+        client = Client(enforce_csrf_checks=True)
+        client.get(reverse('accounts:login'))
+        token = client.cookies['csrftoken'].value
+        response = client.post(
+            reverse('accounts:login'),
+            {'username': self.user.email, 'password': 'StrongPassword123!'},
+            HTTP_ORIGIN='https://localhost:8000',
+            HTTP_X_CSRFTOKEN=token,
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_invalid_csrf_token_uses_recovery_page(self):
+        client = Client(enforce_csrf_checks=True)
+        response = client.post(
+            reverse('accounts:login'),
+            {'username': self.user.email, 'password': 'StrongPassword123!', 'csrfmiddlewaretoken': 'stale-token'},
+            HTTP_ORIGIN='https://localhost:8000',
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertContains(response, 'Reload secure form', status_code=403)
+
+    def test_form_pages_issue_csrf_cookie(self):
+        for url_name in ('accounts:login', 'accounts:register', 'accounts:verify_otp'):
+            response = self.client.get(reverse(url_name))
+            self.assertEqual(response.status_code, 200)
+            self.assertIn('csrftoken', self.client.cookies)
+
+    def test_registration_uses_local_email_backend(self):
+        response = self.client.post(reverse('accounts:register'), {
+            'email': 'newstudent@example.com',
+            'full_name': 'New Student',
+            'enrollment_number': 'STU-002',
+            'phone_number': '9601270941',
+            'password1': 'StrongPassword123!',
+            'password2': 'StrongPassword123!',
+        })
+        self.assertRedirects(response, reverse('accounts:verify_otp'))
+        self.assertTrue(User.objects.filter(email='newstudent@example.com').exists())
+
+    def test_pending_user_can_resend_otp(self):
+        user = User.objects.create_user(email='pending@example.com', password='StrongPassword123!', full_name='Pending Student', enrollment_number='STU-004')
+        session = self.client.session
+        session['pending_email'] = user.email
+        session.save()
+        response = self.client.post(reverse('accounts:resend_otp'))
+        self.assertRedirects(response, reverse('accounts:verify_otp'))
+        self.assertEqual(EmailOTP.objects.filter(user=user).count(), 1)
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.smtp.EmailBackend',
+        EMAIL_HOST='127.0.0.1', EMAIL_PORT=1, EMAIL_TIMEOUT=1,
+    )
+    def test_registration_handles_unavailable_smtp(self):
+        response = self.client.post(reverse('accounts:register'), {
+            'email': 'smtp-failure@example.com',
+            'full_name': 'SMTP Failure',
+            'enrollment_number': 'STU-003',
+            'phone_number': '9601270941',
+            'password1': 'StrongPassword123!',
+            'password2': 'StrongPassword123!',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'could not send the verification email')
+        self.assertFalse(User.objects.filter(email='smtp-failure@example.com').exists())
+
+class HealthContractTests(TestCase):
+    def test_health_endpoint_reports_operational_database(self):
+        response = self.client.get(reverse('health'))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['status'], 'operational')
+        self.assertEqual(response.json()['database'], 'ok')

@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+{% block title %}Sign in | Smart Campus{% endblock %}
+{% block content %}
+<section class="auth-panel">
+	<div class="mb-4">
+		<p class="eyebrow">Secure access</p>
+		<h1>Welcome back.</h1>
+		<p class="text-secondary lead fs-6">Your campus entry point, ready when you are.</p>
+	</div>
+	<form method="post" class="auth-card">
+		{% csrf_token %}
+		{% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+		<div class="mb-3"><label class="form-label" for="id_username">Campus email</label>{{ form.username }}{% for error in form.username.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}</div>
+		<div class="mb-4"><label class="form-label" for="id_password">Password</label>{{ form.password }}{% for error in form.password.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}</div>
+		<button class="btn btn-primary btn-lg rounded-pill w-100" type="submit">Sign in <span aria-hidden="true">→</span></button>
+		<div class="auth-divider"><span>or continue with</span></div>
+		<a class="btn btn-outline-secondary rounded-pill w-100" href="/accounts/google/login/"><span class="google-mark">G</span> Google</a>
+	</form>
+	<p class="mt-4 text-center text-secondary">New to campus? <a class="fw-bold" href="{% url 'accounts:register' %}">Create an account</a></p>
+</section>
+{% endblock %}
