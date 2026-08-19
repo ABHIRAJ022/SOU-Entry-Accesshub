@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from .models import EmailOTP, User
@@ -23,7 +24,7 @@ class AuthenticationContractTests(TestCase):
     def test_https_localhost_origin_is_trusted_for_login(self):
         client = Client(enforce_csrf_checks=True)
         client.get(reverse('accounts:login'))
-        token = client.cookies['csrftoken'].value
+        token = client.cookies[settings.CSRF_COOKIE_NAME].value
         response = client.post(
             reverse('accounts:login'),
             {'username': self.user.email, 'password': 'StrongPassword123!'},
@@ -46,7 +47,7 @@ class AuthenticationContractTests(TestCase):
         for url_name in ('accounts:login', 'accounts:register', 'accounts:verify_otp'):
             response = self.client.get(reverse(url_name))
             self.assertEqual(response.status_code, 200)
-            self.assertIn('csrftoken', self.client.cookies)
+            self.assertIn(settings.CSRF_COOKIE_NAME, self.client.cookies)
 
     def test_registration_uses_local_email_backend(self):
         response = self.client.post(reverse('accounts:register'), {
