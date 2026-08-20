@@ -4,6 +4,11 @@
   "builds": [
     { "src": "api/index.py", "use": "@vercel/python" }
   ],
+  "functions": {
+    "api/index.py": {
+      "includeFiles": ["staticfiles/**"]
+    }
+  },
   "routes": [
     { "src": "/(.*)", "dest": "api/index.py" }
   ]
