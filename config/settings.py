@@ -15,6 +15,7 @@ if not DEBUG and (SECRET_KEY == 'dev-only-change-this-secret-key' or not os.gete
     raise RuntimeError('DJANGO_SECRET_KEY and JWT_SECRET must be configured in production.')
 JWT_SECRET = os.getenv('JWT_SECRET', SECRET_KEY)
 ALLOWED_HOSTS = [host.strip() for host in os.getenv('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',') if host.strip()]
+ALLOWED_HOSTS = [f'.{host[2:]}' if host.startswith('*.') else host for host in ALLOWED_HOSTS]
 if not DEBUG and not os.getenv('DJANGO_ALLOWED_HOSTS'):
     raise RuntimeError('DJANGO_ALLOWED_HOSTS must be set when DJANGO_DEBUG=False.')
 codespace_name = os.getenv('CODESPACE_NAME')
