@@ -1,5 +1,6 @@
 from datetime import timedelta
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
+from django.contrib.auth.hashers import check_password, make_password
 from django.db import models
 from django.utils import timezone
 from .managers import UserManager
@@ -29,6 +30,8 @@ class User(AbstractBaseUser, PermissionsMixin):
     role = models.CharField(max_length=10, choices=Role.choices, default=Role.STUDENT)
     branch = models.ForeignKey(Branch, null=True, blank=True, on_delete=models.SET_NULL, related_name='members')
     is_email_verified = models.BooleanField(default=False); is_approved_by_admin = models.BooleanField(default=False); is_approved_by_super_admin = models.BooleanField(default=False)
+    security_pin_hash = models.CharField(max_length=128, blank=True)
+    profile_photo = models.BinaryField(null=True, blank=True)
     date_joined = models.DateTimeField(default=timezone.now); is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
     objects = UserManager()
@@ -44,6 +47,12 @@ class User(AbstractBaseUser, PermissionsMixin):
         if self.role == self.Role.STUDENT:
             return bool(self.branch_id and self.is_approved_by_admin)
         return self.is_approved_by_super_admin
+
+    def set_security_pin(self, pin):
+        self.security_pin_hash = make_password(pin)
+
+    def check_security_pin(self, pin):
+        return bool(self.security_pin_hash) and check_password(pin, self.security_pin_hash)
 
 class EmailOTP(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='otps')

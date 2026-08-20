@@ -1,13 +1,42 @@
 {% extends 'base.html' %}
+{% load static tz %}
 {% block title %}Student dashboard | Smart Campus{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-start mb-4">
-	<div><p class="eyebrow">Student access</p><h1 class="mb-2">Welcome, {{ student.full_name }}.</h1><p class="text-secondary mb-0">Your campus access status is always up to date here.</p></div>
+  <div><p class="eyebrow">Student access</p><h1 class="mb-2">Welcome, {{ student.full_name }}.</h1><p class="text-secondary mb-0">Your campus access status is always up to date here.</p></div>
 </div>
 <div class="row g-3 mb-4">
-	<div class="col-md-6"><div class="card card-body h-100"><small class="text-secondary text-uppercase fw-bold">Email verification</small><div class="mt-3">{% if email_verified %}<span class="badge text-bg-success">Verified</span><p class="text-secondary mt-2 mb-0">{{ student.email }} is confirmed.</p>{% else %}<span class="badge text-bg-warning">Not verified</span><p class="text-secondary mt-2 mb-0">Check your inbox to verify your campus email.</p>{% endif %}</div></div></div>
-	<div class="col-md-6"><div class="card card-body h-100"><small class="text-secondary text-uppercase fw-bold">Admin approval</small><div class="mt-3">{% if approval_status == 'approved' %}<span class="badge text-bg-success">Approved</span><p class="text-secondary mt-2 mb-0">Your campus access is approved.</p>{% elif approval_status == 'rejected' %}<span class="badge text-bg-danger">Rejected</span><p class="text-secondary mt-2 mb-0">Please contact campus administration.</p>{% else %}<span class="badge text-bg-warning">Pending Admin Approval</span><p class="text-secondary mt-2 mb-0">An administrator will review your account.</p>{% endif %}</div></div></div>
+  <div class="col-md-6"><div class="card card-body h-100"><small class="text-secondary text-uppercase fw-bold">Email verification</small><div class="mt-3">{% if email_verified %}<span class="badge text-bg-success">Verified</span><p class="text-secondary mt-2 mb-0">{{ student.email }} is confirmed.</p>{% else %}<span class="badge text-bg-warning">Not verified</span><p class="text-secondary mt-2 mb-0">Check your inbox to verify your campus email.</p>{% endif %}</div></div></div>
+  <div class="col-md-6"><div class="card card-body h-100"><small class="text-secondary text-uppercase fw-bold">Admin approval</small><div class="mt-3">{% if approval_status == 'approved' %}<span class="badge text-bg-success">Approved</span><p class="text-secondary mt-2 mb-0">Your campus access is approved.</p>{% elif approval_status == 'rejected' %}<span class="badge text-bg-danger">Rejected</span><p class="text-secondary mt-2 mb-0">Please contact campus administration.</p>{% else %}<span class="badge text-bg-warning">Pending Admin Approval</span><p class="text-secondary mt-2 mb-0">An administrator will review your account.</p>{% endif %}</div></div></div>
 </div>
-<div class="card card-body"><h2 class="h5">Secure entry profile</h2>{% if approval_status == 'approved' %}<p class="text-secondary">Set up or verify your encrypted live-face profile for future campus verification.</p><div class="d-flex gap-2 flex-wrap"><a class="btn btn-primary rounded-pill" href="{% url 'biometrics:enroll_page' %}">Enroll live face <span aria-hidden="true">→</span></a><a class="btn btn-outline-secondary rounded-pill" href="{% url 'biometrics:verify_page' %}">Verify live face</a></div>{% else %}<p class="text-secondary mb-0">Biometric enrollment and token requests become available after admin approval.</p>{% endif %}</div>
-{% if approval_status == 'approved' %}<form class="d-none">{% csrf_token %}</form><div class="card card-body mt-3"><h2 class="h5">Campus token</h2><p class="text-secondary">Every token request requires a fresh live webcam verification. Tokens expire after one hour.</p><div class="d-flex gap-2 flex-wrap"><button data-token-action data-url="{% url 'dashboard:issue_token' %}" class="btn btn-primary rounded-pill" type="button">Generate token</button><button data-token-action data-url="{% url 'dashboard:regenerate_token' %}" class="btn btn-outline-secondary rounded-pill" type="button">Regenerate token</button></div><output data-token-result class="small mt-3 d-block" aria-live="polite"></output></div>{% endif %}
+{% if approval_status == 'approved' %}
+<form class="d-none">{% csrf_token %}</form>
+<div class="card card-body mt-3">
+  <h2 class="h5">Campus token</h2>
+  {% if latest_token %}
+    {% if active_token %}<p class="text-warning">An active token already exists. You can create another token after it expires.</p>{% else %}<p class="text-secondary">Your latest token has expired. Take a live photo to create a new one.</p>{% endif %}
+    <div class="d-flex flex-wrap gap-4 align-items-start mb-3">
+      <img src="{{ latest_token_qr }}" width="180" height="180" class="border p-2" alt="Latest signed campus token QR code">
+      <div>
+        <strong>{% if active_token %}Active{% else %}Latest{% endif %} token</strong><br>
+        <small>ID: {{ latest_token.public_id }}<br>Expires: {{ latest_token.expires_at|localtime|date:'Y-m-d H:i' }} IST<br>Generation {{ latest_token.generation }}</small>
+        <p class="mb-2 mt-2">Status: <strong data-token-persistent-status>{% if active_token %}ACTIVE{% else %}EXPIRED{% endif %}</strong><br>Time remaining: <strong data-token-persistent-countdown>--:--:--</strong></p>
+        <a class="btn btn-sm btn-outline-secondary rounded-pill mt-2" href="{% url 'dashboard:token_pdf' latest_token.public_id %}">Download PDF pass</a>
+      </div>
+    </div>
+    <div data-token-persistent data-token-expires="{{ latest_token.expires_at|date:'c' }}" data-token-status-url="{% url 'dashboard:token_status' latest_token.public_id %}"></div>
+  {% else %}
+    <p class="text-secondary">Take a clear live webcam photo, then create a signed entry pass with a 30-minute, 2-hour, or 8-hour validity period.</p>
+  {% endif %}
+  <div class="camera-stage mt-3"><video data-token-camera autoplay muted playsinline></video><p data-token-camera-status class="camera-status">Camera is off</p></div>
+  <div class="d-flex gap-2 flex-wrap mt-3"><button data-token-camera-start class="btn btn-outline-secondary rounded-pill" type="button" {% if active_token %}disabled{% endif %}>Enable camera</button><button data-token-snapshot class="btn btn-outline-secondary rounded-pill" type="button" disabled>Take live photo</button></div>
+  <div data-token-photo-preview class="d-none mt-3"><p class="small text-secondary mb-1">Captured photo</p><img data-token-photo width="180" height="135" class="rounded border object-fit-cover" alt="Captured student photo"></div>
+  <div class="d-flex gap-2 flex-wrap align-items-center mt-3"><label class="visually-hidden" for="token-duration">Token validity</label><select id="token-duration" data-token-duration class="form-select w-auto" {% if active_token %}disabled{% endif %}><option value="30">30 minutes</option><option value="60">1 hour</option><option value="120">2 hours</option><option value="180">3 hours</option><option value="240">4 hours</option><option value="300">5 hours</option><option value="360">6 hours</option><option value="420">7 hours</option><option value="480">8 hours</option></select><button data-token-action data-url="{% url 'dashboard:issue_token' %}" class="btn btn-primary rounded-pill" type="button" disabled>Generate token</button><button data-token-action data-url="{% url 'dashboard:regenerate_token' %}" class="btn btn-outline-secondary rounded-pill" type="button" disabled>Regenerate token</button></div>
+  <div data-token-preview class="small text-success mt-2"></div>
+  <div data-token-pass class="d-none mt-4"><div class="d-flex flex-wrap gap-4 align-items-start"><img data-token-qr class="border p-2" width="180" height="180" alt="Signed campus token QR code"><div><p class="mb-1">Status: <strong data-token-status>ACTIVE</strong></p><p class="mb-3">Time remaining: <strong data-token-countdown>--:--:--</strong></p><a data-token-pdf class="btn btn-sm btn-outline-secondary rounded-pill" href="#">Download PDF pass</a></div></div></div>
+  <output data-token-result class="small mt-3 d-block" aria-live="polite"></output>
+</div>
+{% endif %}
+{% if approval_status == 'approved' and token_history %}<div class="card card-body mt-3"><h2 class="h5">Token history</h2><div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead><tr><th>Token ID</th><th>Created</th><th>Expires</th><th>Status</th><th>Pass</th></tr></thead><tbody>{% for token in token_history %}<tr><td class="small">{{ token.public_id }}</td><td>{{ token.created_at|localtime|date:'Y-m-d H:i' }} IST</td><td>{{ token.expires_at|localtime|date:'Y-m-d H:i' }} IST</td><td>{% if token.is_active %}<span class="badge text-bg-success">ACTIVE</span>{% else %}<span class="badge text-bg-secondary">EXPIRED</span>{% endif %}</td><td><a href="{% url 'dashboard:token_pdf' token.public_id %}" class="small">PDF</a></td></tr>{% endfor %}</tbody></table></div></div>{% endif %}
 {% endblock %}
+{% block scripts %}<script src="{% static 'js/dashboard.js' %}"></script>{% endblock %}

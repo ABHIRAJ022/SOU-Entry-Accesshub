@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load static %}
 {% block title %}Register | Smart Campus{% endblock %}
 {% block content %}
 <section class="auth-panel">
@@ -6,9 +7,18 @@
 	<form method="post" class="auth-card">
 		{% csrf_token %}
 		{% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
-		{% for field in form %}<div class="mb-3"><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}{% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}</div>{% endfor %}
+		<div class="mb-3"><label class="form-label" for="{{ form.role.id_for_label }}">{{ form.role.label }}</label>{{ form.role }}{% for error in form.role.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}{% if form.role.help_text %}<div class="form-text">{{ form.role.help_text }}</div>{% endif %}</div>
+		<div class="mb-3 d-none" data-student-only-field="branch"><label class="form-label" for="{{ form.branch.id_for_label }}">{{ form.branch.label }}</label>{{ form.branch }}{% for error in form.branch.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}{% if form.branch.help_text %}<div class="form-text">{{ form.branch.help_text }}</div>{% endif %}</div>
+		<div class="mb-3"><label class="form-label" for="{{ form.email.id_for_label }}">{{ form.email.label }}</label>{{ form.email }}{% for error in form.email.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}</div>
+		<div class="mb-3"><label class="form-label" for="{{ form.full_name.id_for_label }}">{{ form.full_name.label }}</label>{{ form.full_name }}{% for error in form.full_name.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}</div>
+		<div class="mb-3"><label class="form-label" for="{{ form.enrollment_number.id_for_label }}">{{ form.enrollment_number.label }}</label>{{ form.enrollment_number }}{% for error in form.enrollment_number.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}</div>
+		<div class="mb-3"><label class="form-label" for="{{ form.phone_number.id_for_label }}">{{ form.phone_number.label }}</label>{{ form.phone_number }}{% for error in form.phone_number.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}</div>
+		<div class="mb-3"><label class="form-label" for="{{ form.password1.id_for_label }}">{{ form.password1.label }}</label>{{ form.password1 }}{% for error in form.password1.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}</div>
+		<div class="mb-3"><label class="form-label" for="{{ form.password2.id_for_label }}">{{ form.password2.label }}</label>{{ form.password2 }}{% for error in form.password2.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}</div>
+		<div class="mb-3 d-none" data-student-only-field="security_pin"><label class="form-label" for="{{ form.security_pin.id_for_label }}">{{ form.security_pin.label }}</label>{{ form.security_pin }}{% for error in form.security_pin.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}</div>
 		<button class="btn btn-primary btn-lg rounded-pill w-100 mt-2" type="submit">Send verification code <span aria-hidden="true">→</span></button>
 	</form>
 	<p class="mt-4 text-center text-secondary">Already registered? <a class="fw-bold" href="{% url 'accounts:login' %}">Sign in</a></p>
 </section>
 {% endblock %}
+{% block scripts %}<script src="{% static 'js/register.js' %}"></script>{% endblock %}

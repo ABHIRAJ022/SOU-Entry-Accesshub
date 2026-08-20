@@ -2,13 +2,18 @@ from django.conf import settings
 from django.db import models
 
 
-class FaceProfile(models.Model):
-    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='face_profile')
-    encrypted_vector = models.TextField()
-    vector_version = models.PositiveSmallIntegerField(default=1)
-    samples_count = models.PositiveSmallIntegerField(default=0)
-    enrolled_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+class IdentityVerification(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='identity_verifications')
+    audit_snapshot = models.BinaryField()
+    snapshot_size = models.PositiveIntegerField()
+    verification_method = models.CharField(max_length=12)
+    verified_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
 
     def __str__(self):
-        return f'Face profile for {self.user.email}'
+        return f'Identity verification for {self.user.email}'
+
+    @property
+    def is_valid(self):
+        from django.utils import timezone
+        return timezone.now() < self.expires_at

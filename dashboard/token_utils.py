@@ -1,0 +1,109 @@
+import base64
+import hashlib
+import hmac
+import json
+from io import BytesIO
+
+import qrcode
+from django.conf import settings
+from django.utils import timezone
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.utils import ImageReader
+from reportlab.pdfgen import canvas
+
+
+def signed_payload(token):
+    payload = {
+        'token_id': str(token.public_id),
+        'user_id': token.user_id,
+        'generation': token.generation,
+        'expires_at': token.expires_at.isoformat(),
+    }
+    encoded = base64.urlsafe_b64encode(json.dumps(payload, separators=(',', ':'), sort_keys=True).encode()).decode().rstrip('=')
+    signature = hmac.new(settings.SECRET_KEY.encode(), encoded.encode(), hashlib.sha256).hexdigest()
+    return f'{encoded}.{signature}'
+
+
+def verify_signed_payload(value):
+    try:
+        encoded, signature = value.rsplit('.', 1)
+    except ValueError:
+        return None
+    expected = hmac.new(settings.SECRET_KEY.encode(), encoded.encode(), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(signature, expected):
+        return None
+    try:
+        return json.loads(base64.urlsafe_b64decode(encoded + '=' * (-len(encoded) % 4)))
+    except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+
+
+def token_from_signed_payload(value):
+    payload = verify_signed_payload(value)
+    if not payload:
+        return None
+    from .models import CampusToken
+    return CampusToken.objects.filter(public_id=payload.get('token_id'), user_id=payload.get('user_id')).first()
+
+
+def qr_png(token):
+    image = qrcode.make(signed_payload(token))
+    output = BytesIO()
+    image.save(output, format='PNG')
+    return output.getvalue()
+
+
+def pdf_pass(token):
+    output = BytesIO()
+    document = canvas.Canvas(output, pagesize=A4)
+    width, height = A4
+    document.setTitle(f'Smart Campus Pass {token.public_id}')
+    document.setFont('Helvetica-Bold', 20)
+    document.drawString(54, height - 64, 'SMART CAMPUS')
+    document.setFont('Helvetica', 10)
+    document.drawString(54, height - 82, 'Temporary campus entry pass')
+    document.setStrokeColorRGB(0.1, 0.25, 0.4)
+    document.line(54, height - 98, width - 54, height - 98)
+    document.setFont('Helvetica-Bold', 12)
+    document.drawString(54, height - 140, 'Student details')
+    document.setStrokeColorRGB(0.4, 0.4, 0.4)
+    document.rect(width - 174, height - 238, 120, 120)
+    audit_snapshot = token.audit.snapshot if hasattr(token, 'audit') else None
+    photo = audit_snapshot or token.user.profile_photo
+    if photo:
+        try:
+            document.drawImage(ImageReader(BytesIO(photo)), width - 174, height - 238, width=120, height=120, preserveAspectRatio=True, anchor='c', mask='auto')
+        except Exception:
+            document.setFont('Helvetica', 9)
+            document.drawCentredString(width - 114, height - 178, 'PHOTO UNAVAILABLE')
+    else:
+        document.setFont('Helvetica-Bold', 24)
+        initials = ''.join(part[0] for part in token.user.full_name.split()[:2]).upper()
+        document.drawCentredString(width - 114, height - 178, initials or 'SC')
+    document.setFont('Helvetica', 8)
+    document.drawCentredString(width - 114, height - 228, 'Student photo')
+    document.setFont('Helvetica', 11)
+    details = [
+        ('Name', token.user.full_name),
+        ('Enrollment No.', token.user.enrollment_number or 'Not provided'),
+        ('Department / Branch', token.user.branch.name if token.user.branch else 'Not provided'),
+        ('Token ID', str(token.public_id)),
+        ('Token expiry (IST)', timezone.localtime(token.expires_at).strftime('%Y-%m-%d %H:%M:%S %Z')),
+    ]
+    y = height - 166
+    for label, value in details:
+        document.setFont('Helvetica-Bold', 10)
+        document.drawString(54, y, f'{label}:')
+        document.setFont('Helvetica', 10)
+        document.drawString(180, y, str(value)[:90])
+        y -= 20
+    document.setFont('Helvetica-Bold', 12)
+    document.drawString(54, y - 12, 'Signed entry QR')
+    qr = ImageReader(BytesIO(qr_png(token)))
+    document.drawImage(qr, 54, y - 194, width=150, height=150, preserveAspectRatio=True, mask='auto')
+    document.setFont('Helvetica', 8)
+    document.drawString(54, 56, 'Security disclaimer: This pass is time-bound, signed, and valid only for the named student.')
+    document.drawString(54, 44, 'Present this pass at the campus entry checkpoint. Forged or altered passes are invalid.')
+    document.showPage()
+    document.save()
+    return output.getvalue()

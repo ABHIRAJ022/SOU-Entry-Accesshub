@@ -1,9 +1,9 @@
 from django.contrib import admin
-from .models import FaceProfile
+from .models import IdentityVerification
 
 
-@admin.register(FaceProfile)
-class FaceProfileAdmin(admin.ModelAdmin):
-    list_display = ('user', 'samples_count', 'vector_version', 'updated_at')
-    readonly_fields = ('encrypted_vector', 'enrolled_at', 'updated_at')
+@admin.register(IdentityVerification)
+class IdentityVerificationAdmin(admin.ModelAdmin):
+    list_display = ('user', 'verification_method', 'snapshot_size', 'verified_at', 'expires_at')
+    readonly_fields = ('audit_snapshot', 'snapshot_size', 'verified_at', 'expires_at')
     search_fields = ('user__email', 'user__full_name')

@@ -14,6 +14,7 @@ def sanitized(value):
 class RegistrationForm(forms.ModelForm):
     password1 = forms.CharField(widget=forms.PasswordInput, min_length=12)
     password2 = forms.CharField(widget=forms.PasswordInput, min_length=12)
+    security_pin = forms.CharField(label='Student security PIN', min_length=6, max_length=12, required=False, widget=forms.PasswordInput)
     role = forms.ChoiceField(choices=User.Role.choices, label='Account type')
     branch = forms.ModelChoiceField(queryset=Branch.objects.filter(is_active=True), required=False, label='Campus branch')
     class Meta:
@@ -44,9 +45,14 @@ class RegistrationForm(forms.ModelForm):
         if data.get('password1') != data.get('password2'): raise ValidationError('Passwords do not match.')
         if data.get('role') == User.Role.STUDENT and not data.get('branch'):
             raise ValidationError('Students must select a campus branch.')
+        pin = data.get('security_pin', '')
+        if data.get('role') == User.Role.STUDENT and (not pin or not pin.isdigit()):
+            raise ValidationError('Students must choose a numeric security PIN.')
         return data
     def save(self, commit=True):
         user = super().save(commit=False); user.set_password(self.cleaned_data['password1'])
+        if self.cleaned_data.get('security_pin'):
+            user.set_security_pin(self.cleaned_data['security_pin'])
         if commit: user.save()
         return user
 

@@ -71,6 +71,7 @@ class AuthenticationContractTests(TestCase):
             'phone_number': '9601270941',
             'password1': 'StrongPassword123!',
             'password2': 'StrongPassword123!',
+            'security_pin': '123456',
         })
         self.assertRedirects(response, reverse('accounts:verify_otp'))
         self.assertTrue(User.objects.filter(email='newstudent@example.com').exists())
@@ -83,6 +84,20 @@ class AuthenticationContractTests(TestCase):
         response = self.client.post(reverse('accounts:resend_otp'))
         self.assertRedirects(response, reverse('accounts:verify_otp'))
         self.assertEqual(EmailOTP.objects.filter(user=user).count(), 1)
+
+    def test_valid_otp_redirects_to_login(self):
+        user = User.objects.create_user(email='verify@example.com', password='StrongPassword123!', full_name='Verify Student', enrollment_number='STU-005', branch=self.branch)
+        user.set_security_pin('123456')
+        user.save(update_fields=['security_pin_hash'])
+        from django.contrib.auth.hashers import make_password
+        EmailOTP.objects.create(user=user, code_hash=make_password('371090'))
+        session = self.client.session
+        session['pending_email'] = user.email
+        session.save()
+        response = self.client.post(reverse('accounts:verify_otp'), {'code': '371090'})
+        self.assertRedirects(response, reverse('accounts:login'))
+        user.refresh_from_db()
+        self.assertTrue(user.is_email_verified)
 
     @override_settings(
         EMAIL_BACKEND='django.core.mail.backends.smtp.EmailBackend',
@@ -98,6 +113,7 @@ class AuthenticationContractTests(TestCase):
             'phone_number': '9601270941',
             'password1': 'StrongPassword123!',
             'password2': 'StrongPassword123!',
+            'security_pin': '123456',
         })
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'could not send the verification email')
@@ -114,6 +130,12 @@ class AuthenticationContractTests(TestCase):
             user = User.objects.get(email=email)
             self.assertEqual(user.role, role)
             self.assertFalse(user.is_approved_by_super_admin)
+
+    def test_staff_registration_form_hides_student_only_fields(self):
+        response = self.client.get(reverse('accounts:register'))
+        self.assertContains(response, 'data-student-only-field="branch"')
+        self.assertContains(response, 'data-student-only-field="security_pin"')
+        self.assertContains(response, 'register.js')
 
     def test_staff_cannot_login_before_super_admin_approval(self):
         staff = User.objects.create_user(email='staff-pending@example.com', password='StrongPassword123!', full_name='Pending Staff', role=User.Role.SECURITY)

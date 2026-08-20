@@ -14,9 +14,6 @@
 		<div class="mb-3"><label class="form-label" for="id_role">Sign in as</label>{{ form.role }}{% for error in form.role.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}</div>
 		<div class="mb-3"><label class="form-label" for="id_username">Campus email</label>{{ form.username }}{% for error in form.username.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}</div>
 		<div class="mb-4"><label class="form-label" for="id_password">Password</label>{{ form.password }}{% for error in form.password.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}</div>
-		<div class="camera-stage login-camera-stage"><video data-camera autoplay muted playsinline></video><p data-camera-status class="camera-status">Live face verification is required</p></div>
-		<div class="d-flex gap-2 mt-3"><button data-camera-start class="btn btn-outline-secondary rounded-pill flex-fill" type="button">Enable camera</button><button data-camera-capture class="btn btn-outline-secondary rounded-pill flex-fill" type="button" disabled>Verify live face</button></div>
-		<div class="progress mt-3" role="progressbar" aria-label="Face verification progress"><div data-capture-progress class="progress-bar" style="width:0%"></div></div><div data-camera-result class="small mt-3" role="status"></div>
 		<button class="btn btn-primary btn-lg rounded-pill w-100" type="submit">Sign in <span aria-hidden="true">→</span></button>
 		<div class="auth-divider"><span>or continue with</span></div>
 		<a class="btn btn-outline-secondary rounded-pill w-100" href="/accounts/google/login/"><span class="google-mark">G</span> Google</a>
@@ -24,4 +21,3 @@
 	<p class="mt-4 text-center text-secondary">New to campus? <a class="fw-bold" href="{% url 'accounts:register' %}">Create an account</a></p>
 </section>
 {% endblock %}
-{% block scripts %}<script>window.BIOMETRIC_CAPTURE_ID = '{{ login_capture_id|escapejs }}'; window.BIOMETRIC_MODE = 'login';</script><script src="{% static 'js/face_capture.js' %}"></script>{% endblock %}

@@ -1,21 +1,34 @@
+import base64
+import binascii
 import json
 import secrets
 from datetime import timedelta
-from django.utils import timezone
+from io import BytesIO
+from smtplib import SMTPException
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.hashers import check_password, make_password
+from django.core.mail import send_mail
 from django.http import JsonResponse
 from django.shortcuts import render
-from django.views.decorators.csrf import ensure_csrf_cookie, csrf_protect
+from django.utils import timezone
+from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_POST
+from django_ratelimit.decorators import ratelimit
+from PIL import Image, UnidentifiedImageError
 
-from .crypto import decrypt_vector, encrypt_vector
-from .models import FaceProfile
-from .vision import VisionError, analyze_frame, average_vectors, compare_vector, decode_webcam_frame, has_liveness_variation
+from accounts.models import EmailOTP
+from .models import IdentityVerification
+from .snapshots import SnapshotError, process_webcam_snapshot
 
-MIN_FRAMES = 5
-MAX_FRAMES = 10
+MAX_SNAPSHOT_BYTES = 200 * 1024
+
+
+class IdentityError(Exception):
+    def __init__(self, message, status=400):
+        super().__init__(message)
+        self.status = status
 
 
 def _error(message, status=400):
@@ -23,156 +36,124 @@ def _error(message, status=400):
 
 
 def _payload(request):
-    if int(request.META.get('CONTENT_LENGTH') or 0) > settings.BIOMETRIC_MAX_REQUEST_BYTES:
-        raise VisionError('The capture payload is too large.')
-    if not request.content_type.startswith('application/json'):
-        raise VisionError('Biometric requests must use application/json.')
+    if int(request.META.get('CONTENT_LENGTH') or 0) > settings.IDENTITY_MAX_REQUEST_BYTES:
+        raise IdentityError('The verification payload is too large.')
+    if request.content_type != 'application/json':
+        raise IdentityError('Identity verification must use application/json.')
     try:
         payload = json.loads(request.body)
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise VisionError('The biometric request is not valid JSON.') from exc
+        raise IdentityError('The verification request is not valid JSON.') from exc
     if not isinstance(payload, dict):
-        raise VisionError('The biometric request must be a JSON object.')
+        raise IdentityError('The verification request must be a JSON object.')
     return payload
 
 
-def _frames(request, payload):
+def _snapshot(payload, request):
     if payload.get('capture_mode') != 'webcam':
-        raise VisionError('Only live webcam capture is accepted.')
-    if payload.get('capture_id') != request.session.get('biometric_capture_id'):
-        raise VisionError('This capture session expired. Reload the camera page.')
-    frames = payload.get('frames')
-    if not isinstance(frames, list) or not MIN_FRAMES <= len(frames) <= MAX_FRAMES:
-        raise VisionError(f'Send between {MIN_FRAMES} and {MAX_FRAMES} sequential webcam frames.')
-    analyses = []
-    previous_timestamp = 0
-    for index, frame in enumerate(frames):
-        if not isinstance(frame, dict) or frame.get('sequence') != index:
-            raise VisionError('Webcam frames must have contiguous sequence numbers.')
-        timestamp = int(frame.get('timestamp_ms') or 0)
-        if timestamp <= previous_timestamp:
-            raise VisionError('Webcam frame timestamps must be increasing.')
-        previous_timestamp = timestamp
-        analyses.append(analyze_frame(decode_webcam_frame(frame.get('data'))))
-    return analyses
+        raise IdentityError('Only live webcam capture is accepted.')
+    if payload.get('capture_id') != request.session.get('identity_capture_id'):
+        raise IdentityError('This camera session expired. Reload the verification page.')
+    try:
+        captured_at = float(payload.get('captured_at'))
+    except (TypeError, ValueError) as exc:
+        raise IdentityError('A live capture timestamp is required.') from exc
+    now = timezone.now().timestamp()
+    if captured_at > now + 5 or now - captured_at > 120:
+        raise IdentityError('The webcam snapshot is stale. Capture a new image.')
+    data = payload.get('image')
+    if not isinstance(data, str) or not data.startswith('data:image/jpeg;base64,'):
+        raise IdentityError('Only a JPEG snapshot from the live webcam is accepted.')
+    try:
+        return process_webcam_snapshot(payload)
+    except SnapshotError as exc:
+        raise IdentityError(str(exc)) from exc
 
 
-def _require_secure_camera(request):
+def _valid_user(request):
+    if not request.user.is_authenticated:
+        raise IdentityError('Authentication is required.', 401)
+    if not request.user.can_login:
+        raise IdentityError('Your account must be verified and approved before identity verification.', 403)
     if not request.is_secure():
-        raise VisionError('Camera enrollment and verification require HTTPS.')
-    if not request.user.is_authenticated and not request.session.get('pending_biometric_email'):
-        raise VisionError('Authentication is required.', 401)
-    if request.user.is_authenticated:
-        if not request.user.can_login:
-            raise VisionError('Your account must be verified and approved before biometric access.', 403)
+        raise IdentityError('Camera verification requires HTTPS.', 403)
+    return request.user
 
 
-def _pending_user(request):
-    from accounts.models import User
-    email = request.session.get('pending_biometric_email')
-    return User.objects.filter(email=email, is_email_verified=True).first() if email else None
+def _verification_code(user):
+    code = f'{secrets.randbelow(10000):04d}'
+    user.otps.filter(used_at__isnull=True).update(used_at=timezone.now())
+    EmailOTP.objects.create(user=user, code_hash=make_password(code))
+    send_mail('Smart Campus emergency verification code', f'Your emergency identity verification code is {code}. It expires in 10 minutes.', settings.DEFAULT_FROM_EMAIL, [user.email], fail_silently=False)
 
 
-def _capture_owner(request):
-    return request.user if request.user.is_authenticated else _pending_user(request)
+def has_recent_identity_verification(request):
+    verification_id = request.session.get('identity_verification_id')
+    timestamp = float(request.session.get('identity_verified_at', 0) or 0)
+    if not verification_id or timezone.now().timestamp() - timestamp > settings.IDENTITY_VERIFICATION_MAX_AGE_SECONDS:
+        return False
+    verification = IdentityVerification.objects.filter(pk=verification_id, user=request.user).first()
+    return bool(verification and verification.is_valid)
 
 
-def has_recent_live_verification(request, email=None):
-    verified_email = request.session.get('live_face_verified_email')
-    timestamp = request.session.get('live_face_verified_at', 0)
-    return bool(verified_email and (email is None or verified_email == email) and timezone.now().timestamp() - float(timestamp) <= settings.BIOMETRIC_VERIFICATION_MAX_AGE_SECONDS)
-
-
-@require_GET
-@ensure_csrf_cookie
-def enrollment_page(request):
-    owner = _capture_owner(request)
-    if not owner:
-        return render(request, 'biometrics/enroll.html', {'error': 'Sign in or complete email verification before enrolling your live face.'}, status=403)
-    request.session['biometric_capture_id'] = secrets.token_urlsafe(24)
-    return render(request, 'biometrics/enroll.html', {'capture_id': request.session['biometric_capture_id'], 'mode': 'enroll'})
+has_recent_live_verification = has_recent_identity_verification
 
 
 @require_GET
 @login_required
 @ensure_csrf_cookie
 def verification_page(request):
-    request.session['biometric_capture_id'] = secrets.token_urlsafe(24)
-    return render(request, 'biometrics/enroll.html', {'capture_id': request.session['biometric_capture_id'], 'mode': 'verify'})
-
-
-@require_POST
-@csrf_protect
-def enroll(request):
-    try:
-        _require_secure_camera(request)
-        owner = _capture_owner(request)
-        if not owner:
-            raise VisionError('Authentication or verified registration is required.', 401)
-        payload = _payload(request)
-        analyses = _frames(request, payload)
-        if not has_liveness_variation(analyses):
-            return _error('Liveness check failed. Blink or slowly move your head during capture.')
-        vector = average_vectors([analysis[0] for analysis in analyses])
-        profile, _ = FaceProfile.objects.update_or_create(user=owner, defaults={'encrypted_vector': encrypt_vector(vector), 'samples_count': len(analyses)})
-        request.session.pop('biometric_capture_id', None)
-        if not request.user.is_authenticated:
-            request.session['registration_face_complete'] = owner.email
-            request.session.pop('pending_biometric_email', None)
-        return JsonResponse({'enrolled': True, 'registration_complete': not request.user.is_authenticated, 'samples': profile.samples_count, 'message': 'Biometric enrollment completed securely.'})
-    except VisionError as exc:
-        message = str(exc)
-        return _error(message, 401 if 'Authentication' in message else (403 if 'HTTPS' in message or 'approved' in message else 400))
+    request.session['identity_capture_id'] = secrets.token_urlsafe(24)
+    return render(request, 'biometrics/enroll.html', {'capture_id': request.session['identity_capture_id']})
 
 
 @require_POST
 @csrf_protect
 @login_required
-def verify(request):
+@ratelimit(key='ip', rate='3/m', method='POST', block=True)
+def request_emergency_otp(request):
     try:
-        _require_secure_camera(request)
-        profile = FaceProfile.objects.filter(user=request.user).first()
-        if not profile:
-            return _error('No biometric profile is enrolled.', 404)
-        payload = _payload(request)
-        analyses = _frames(request, payload)
-        if not has_liveness_variation(analyses):
-            return _error('Liveness check failed. Blink or slowly move your head during capture.')
-        stored = decrypt_vector(profile.encrypted_vector)
-        distances = [compare_vector(analysis[0], stored) for analysis in analyses]
-        distance, confidence = min(distances, key=lambda item: item[0])
-        verified = confidence >= settings.BIOMETRIC_MATCH_THRESHOLD
-        request.session.pop('biometric_capture_id', None)
-        if verified:
-            request.session['live_face_verified_email'] = request.user.email
-            request.session['live_face_verified_at'] = timezone.now().timestamp()
-        return JsonResponse({'verified': verified, 'confidence': round(confidence, 4), 'distance': round(distance, 4), 'error': None if verified else 'Face did not match the enrolled profile.'})
-    except VisionError as exc:
-        message = str(exc)
-        return _error(message, 401 if 'Authentication' in message else (403 if 'HTTPS' in message or 'approved' in message else 400))
+        user = _valid_user(request)
+        _verification_code(user)
+        return JsonResponse({'sent': True, 'message': 'A four-digit emergency code was sent to your registered email.'})
+    except IdentityError as exc:
+        return _error(str(exc), exc.status)
+    except (OSError, SMTPException):
+        return _error('The emergency code could not be sent. Try again later.', 503)
 
 
 @require_POST
 @csrf_protect
-def login_verify(request):
+@login_required
+@ratelimit(key='ip', rate='3/m', method='POST', block=True)
+def verify_identity(request):
     try:
-        _require_secure_camera(request)
-        from accounts.models import User
+        user = _valid_user(request)
         payload = _payload(request)
-        email = str(payload.get('email', '')).strip().lower()
-        user = User.objects.filter(email=email, is_active=True).first()
-        profile = FaceProfile.objects.filter(user=user).first() if user else None
-        if not user or not profile:
-            raise VisionError('Live face verification could not be completed.')
-        analyses = _frames(request, payload)
-        if not has_liveness_variation(analyses):
-            return _error('Liveness check failed. Blink or slowly move your head during capture.')
-        stored = decrypt_vector(profile.encrypted_vector)
-        distance, confidence = min((compare_vector(analysis[0], stored) for analysis in analyses), key=lambda item: item[0])
-        if confidence < settings.BIOMETRIC_MATCH_THRESHOLD:
-            return _error('Live face did not match this account.')
-        request.session['live_face_verified_email'] = user.email
-        request.session['live_face_verified_at'] = timezone.now().timestamp()
-        return JsonResponse({'verified': True, 'confidence': round(confidence, 4)})
-    except VisionError as exc:
-        return _error(str(exc), 403 if 'HTTPS' in str(exc) else 400)
+        snapshot = _snapshot(payload, request)
+        pin = str(payload.get('pin') or '').strip()
+        otp_code = str(payload.get('otp') or '').strip()
+        method = 'pin' if pin else 'otp'
+        if method == 'pin':
+            verified = user.check_security_pin(pin)
+        elif len(otp_code) == 4 and otp_code.isdigit():
+            otp = user.otps.filter(used_at__isnull=True).order_by('-created_at').first()
+            verified = bool(otp and otp.is_valid() and check_password(otp_code, otp.code_hash))
+            if verified:
+                otp.used_at = timezone.now()
+                otp.save(update_fields=['used_at'])
+            elif otp:
+                otp.attempts = min(otp.attempts + 1, 255)
+                otp.save(update_fields=['attempts'])
+        else:
+            return _error('Enter your security PIN or request a four-digit emergency code.')
+        if not verified:
+            return _error('Identity verification failed. Check your PIN or emergency code.')
+        verification = IdentityVerification.objects.create(user=user, audit_snapshot=snapshot, snapshot_size=len(snapshot), verification_method=method, expires_at=timezone.now() + timedelta(seconds=settings.IDENTITY_VERIFICATION_MAX_AGE_SECONDS))
+        request.session['identity_verified'] = True
+        request.session['identity_verification_id'] = verification.pk
+        request.session['identity_verified_at'] = timezone.now().timestamp()
+        request.session.pop('identity_capture_id', None)
+        return JsonResponse({'verified': True, 'expires_in': settings.IDENTITY_VERIFICATION_MAX_AGE_SECONDS})
+    except IdentityError as exc:
+        return _error(str(exc), exc.status)

@@ -11,7 +11,12 @@ def env_bool(name, default=False):
 
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'dev-only-change-this-secret-key')
 DEBUG = env_bool('DJANGO_DEBUG', True)
+if not DEBUG and (SECRET_KEY == 'dev-only-change-this-secret-key' or not os.getenv('JWT_SECRET')):
+    raise RuntimeError('DJANGO_SECRET_KEY and JWT_SECRET must be configured in production.')
+JWT_SECRET = os.getenv('JWT_SECRET', SECRET_KEY)
 ALLOWED_HOSTS = [host.strip() for host in os.getenv('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',') if host.strip()]
+if not DEBUG and not os.getenv('DJANGO_ALLOWED_HOSTS'):
+    raise RuntimeError('DJANGO_ALLOWED_HOSTS must be set when DJANGO_DEBUG=False.')
 codespace_name = os.getenv('CODESPACE_NAME')
 codespace_domain = os.getenv('GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN', 'app.github.dev')
 if codespace_name:
@@ -38,15 +43,16 @@ INSTALLED_APPS = [
     'django.contrib.sessions', 'django.contrib.messages', 'django.contrib.staticfiles',
     'django.contrib.sites', 'allauth', 'allauth.account', 'allauth.socialaccount',
     'allauth.socialaccount.providers.google', 'rest_framework', 'csp',
-    'accounts', 'core', 'dashboard', 'biometrics',
+    'corsheaders', 'cloudinary_storage', 'accounts', 'core', 'dashboard', 'biometrics',
 ]
 MIDDLEWARE = [
-    'django.middleware.security.SecurityMiddleware', 'csp.middleware.CSPMiddleware',
+    'django.middleware.security.SecurityMiddleware', 'whitenoise.middleware.WhiteNoiseMiddleware',
+    'corsheaders.middleware.CorsMiddleware', 'csp.middleware.CSPMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware', 'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware', 'django.contrib.auth.middleware.AuthenticationMiddleware',
     'allauth.account.middleware.AccountMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware', 'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'core.middleware.SecurityHeadersMiddleware',
+    'core.middleware.SecurityHeadersMiddleware', 'core.middleware.AuditLoggingMiddleware',
 ]
 ROOT_URLCONF = 'config.urls'
 TEMPLATES = [{
@@ -60,7 +66,8 @@ TEMPLATES = [{
 }]
 WSGI_APPLICATION = 'config.wsgi.application'
 ASGI_APPLICATION = 'config.asgi.application'
-DATABASES = {'default': {'ENGINE': 'django.db.backends.sqlite3', 'NAME': BASE_DIR / 'db.sqlite3'}}
+import dj_database_url
+DATABASES = {'default': dj_database_url.config(default=f'sqlite:///{BASE_DIR / "db.sqlite3"}', conn_max_age=600, conn_health_checks=True)}
 
 AUTH_USER_MODEL = 'accounts.User'
 AUTHENTICATION_BACKENDS = ['django.contrib.auth.backends.ModelBackend', 'allauth.account.auth_backends.AuthenticationBackend']
@@ -77,8 +84,13 @@ AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
-LANGUAGE_CODE = 'en-us'; TIME_ZONE = 'UTC'; USE_I18N = True; USE_TZ = True
+LANGUAGE_CODE = 'en-us'; TIME_ZONE = 'Asia/Kolkata'; USE_I18N = True; USE_TZ = True
 STATIC_URL = 'static/'; STATICFILES_DIRS = [BASE_DIR / 'static']; STATIC_ROOT = BASE_DIR / 'staticfiles'
+STORAGES = {
+    'default': {'BACKEND': 'cloudinary_storage.storage.MediaCloudinaryStorage'} if os.getenv('CLOUDINARY_URL') else {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+    'staticfiles': {'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage' if not DEBUG else 'django.contrib.staticfiles.storage.StaticFilesStorage'},
+}
+MEDIA_URL = os.getenv('MEDIA_URL', '/media/')
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 EMAIL_HOST = os.getenv('EMAIL_HOST', 'localhost'); EMAIL_PORT = int(os.getenv('EMAIL_PORT', '25'))
@@ -109,12 +121,26 @@ CONTENT_SECURITY_POLICY = {'DIRECTIVES': {
     'style-src': ("'self'", 'https://cdn.jsdelivr.net'), 'font-src': ("'self'", 'https://cdn.jsdelivr.net'),
     'img-src': ("'self'", 'data:'), 'connect-src': ("'self'",),
 }}
+CORS_ALLOWED_ORIGINS = [origin.strip() for origin in os.getenv('CORS_ALLOWED_ORIGINS', '').split(',') if origin.strip()]
+CORS_ALLOW_CREDENTIALS = True
+if not DEBUG:
+    SECURE_SSL_REDIRECT = True
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    if not os.getenv('CLOUDINARY_URL'):
+        raise RuntimeError('CLOUDINARY_URL must be set in production.')
+    if not os.getenv('DATABASE_URL'):
+        raise RuntimeError('DATABASE_URL must be set in production.')
+    CLOUDINARY_STORAGE = {'SECURE': True}
 
 RATELIMIT_ENABLE = True
 REST_FRAMEWORK = {'DEFAULT_THROTTLE_CLASSES': ['rest_framework.throttling.AnonRateThrottle', 'rest_framework.throttling.UserRateThrottle'], 'DEFAULT_THROTTLE_RATES': {'anon': '60/minute', 'user': '120/minute'}}
 SOCIALACCOUNT_PROVIDERS = {'google': {'SCOPE': ['profile', 'email'], 'AUTH_PARAMS': {'access_type': 'online'}}}
 SOCIALACCOUNT_ADAPTER = 'accounts.adapters.CampusSocialAccountAdapter'
 ACCOUNT_LOGIN_METHODS = {'email'}; ACCOUNT_SIGNUP_FIELDS = ['email*', 'password1*', 'password2*']; ACCOUNT_EMAIL_VERIFICATION = 'mandatory'
-BIOMETRIC_MAX_REQUEST_BYTES = int(os.getenv('BIOMETRIC_MAX_REQUEST_BYTES', '12000000'))
-BIOMETRIC_MATCH_THRESHOLD = float(os.getenv('BIOMETRIC_MATCH_THRESHOLD', '0.6'))
-BIOMETRIC_VERIFICATION_MAX_AGE_SECONDS = int(os.getenv('BIOMETRIC_VERIFICATION_MAX_AGE_SECONDS', '300'))
+IDENTITY_MAX_REQUEST_BYTES = int(os.getenv('IDENTITY_MAX_REQUEST_BYTES', '400000'))
+IDENTITY_VERIFICATION_MAX_AGE_SECONDS = int(os.getenv('IDENTITY_VERIFICATION_MAX_AGE_SECONDS', '300'))
