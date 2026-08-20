@@ -2,14 +2,11 @@
   "version": 2,
   "buildCommand": "bash build_files.sh",
   "builds": [
-    { "src": "api/index.py", "use": "@vercel/python" }
+    { "src": "api/index.py", "use": "@vercel/python" },
+    { "src": "static/**", "use": "@vercel/static" }
   ],
-  "functions": {
-    "api/index.py": {
-      "includeFiles": ["staticfiles/**"]
-    }
-  },
   "routes": [
+    { "src": "/static/(.*)", "dest": "/static/$1" },
     { "src": "/(.*)", "dest": "api/index.py" }
   ]
 }

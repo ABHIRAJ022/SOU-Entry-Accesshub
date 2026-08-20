@@ -11,6 +11,7 @@ def env_bool(name, default=False):
 
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'dev-only-change-this-secret-key')
 DEBUG = env_bool('DJANGO_DEBUG', True)
+IS_VERCEL = os.getenv('VERCEL') == '1'
 if not DEBUG and (SECRET_KEY == 'dev-only-change-this-secret-key' or not os.getenv('JWT_SECRET')):
     raise RuntimeError('DJANGO_SECRET_KEY and JWT_SECRET must be configured in production.')
 JWT_SECRET = os.getenv('JWT_SECRET', SECRET_KEY)
@@ -89,7 +90,7 @@ LANGUAGE_CODE = 'en-us'; TIME_ZONE = 'Asia/Kolkata'; USE_I18N = True; USE_TZ = T
 STATIC_URL = 'static/'; STATICFILES_DIRS = [BASE_DIR / 'static']; STATIC_ROOT = BASE_DIR / 'staticfiles'
 STORAGES = {
     'default': {'BACKEND': 'cloudinary_storage.storage.MediaCloudinaryStorage'} if os.getenv('CLOUDINARY_URL') else {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
-    'staticfiles': {'BACKEND': 'core.static_storage.NonStrictCompressedManifestStaticFilesStorage' if not DEBUG else 'django.contrib.staticfiles.storage.StaticFilesStorage'},
+    'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage' if DEBUG or IS_VERCEL else 'core.static_storage.NonStrictCompressedManifestStaticFilesStorage'},
 }
 MEDIA_URL = os.getenv('MEDIA_URL', '/media/')
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
