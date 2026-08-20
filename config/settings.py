@@ -12,10 +12,25 @@ def env_bool(name, default=False):
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'dev-only-change-this-secret-key')
 DEBUG = env_bool('DJANGO_DEBUG', True)
 ALLOWED_HOSTS = [host.strip() for host in os.getenv('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',') if host.strip()]
+codespace_name = os.getenv('CODESPACE_NAME')
+codespace_domain = os.getenv('GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN', 'app.github.dev')
+if codespace_name:
+    codespace_host = f'{codespace_name}-8000.{codespace_domain}'
+    if codespace_host not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(codespace_host)
+SITE_URL = os.getenv('DJANGO_SITE_URL', 'http://localhost:8000').rstrip('/')
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+USE_X_FORWARDED_HOST = True
+SEO_SITE_NAME = 'Smart Campus'
+SEO_DEFAULT_DESCRIPTION = 'Smart Campus provides secure, role-based campus entry and token management for students, administrators, and security staff.'
 CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in os.getenv(
     'DJANGO_CSRF_TRUSTED_ORIGINS',
     'http://localhost:8000,https://localhost:8000,http://127.0.0.1:8000,https://127.0.0.1:8000',
 ).split(',') if origin.strip()]
+if codespace_name:
+    codespace_origin = f'https://{codespace_host}'
+    if codespace_origin not in CSRF_TRUSTED_ORIGINS:
+        CSRF_TRUSTED_ORIGINS.append(codespace_origin)
 CSRF_FAILURE_VIEW = 'core.views.csrf_failure'
 
 INSTALLED_APPS = [
@@ -23,7 +38,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions', 'django.contrib.messages', 'django.contrib.staticfiles',
     'django.contrib.sites', 'allauth', 'allauth.account', 'allauth.socialaccount',
     'allauth.socialaccount.providers.google', 'rest_framework', 'csp',
-    'accounts', 'core', 'dashboard',
+    'accounts', 'core', 'dashboard', 'biometrics',
 ]
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware', 'csp.middleware.CSPMiddleware',
@@ -40,6 +55,7 @@ TEMPLATES = [{
     'OPTIONS': {'context_processors': [
         'django.template.context_processors.request', 'django.contrib.auth.context_processors.auth',
         'django.contrib.messages.context_processors.messages',
+        'core.context_processors.seo',
     ]},
 }]
 WSGI_APPLICATION = 'config.wsgi.application'
@@ -99,3 +115,6 @@ REST_FRAMEWORK = {'DEFAULT_THROTTLE_CLASSES': ['rest_framework.throttling.AnonRa
 SOCIALACCOUNT_PROVIDERS = {'google': {'SCOPE': ['profile', 'email'], 'AUTH_PARAMS': {'access_type': 'online'}}}
 SOCIALACCOUNT_ADAPTER = 'accounts.adapters.CampusSocialAccountAdapter'
 ACCOUNT_LOGIN_METHODS = {'email'}; ACCOUNT_SIGNUP_FIELDS = ['email*', 'password1*', 'password2*']; ACCOUNT_EMAIL_VERIFICATION = 'mandatory'
+BIOMETRIC_MAX_REQUEST_BYTES = int(os.getenv('BIOMETRIC_MAX_REQUEST_BYTES', '12000000'))
+BIOMETRIC_MATCH_THRESHOLD = float(os.getenv('BIOMETRIC_MATCH_THRESHOLD', '0.6'))
+BIOMETRIC_VERIFICATION_MAX_AGE_SECONDS = int(os.getenv('BIOMETRIC_VERIFICATION_MAX_AGE_SECONDS', '300'))

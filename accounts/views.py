@@ -22,9 +22,16 @@ logger = logging.getLogger(__name__)
 @ensure_csrf_cookie
 def login_view(request):
     if request.user.is_authenticated: return redirect('dashboard:home')
+    if request.method == 'GET':
+        request.session['login_capture_id'] = secrets.token_urlsafe(24)
+        request.session['biometric_capture_id'] = request.session['login_capture_id']
     form = SecureLoginForm(request, data=request.POST or None)
-    if request.method == 'POST' and form.is_valid(): login(request, form.get_user()); return redirect('dashboard:home')
-    return render(request, 'accounts/login.html', {'form': form})
+    if request.method == 'POST' and form.is_valid():
+        if request.session.get('live_face_verified_email') != form.get_user().email:
+            form.add_error(None, 'Complete live face verification before signing in.')
+        else:
+            login(request, form.get_user()); request.session.pop('live_face_verified_email', None); request.session.pop('live_face_verified_at', None); return redirect('dashboard:home')
+    return render(request, 'accounts/login.html', {'form': form, 'login_capture_id': request.session.get('login_capture_id')})
 
 @ratelimit(key='ip', rate='5/m', method='POST', block=True)
 @transaction.atomic
@@ -56,7 +63,7 @@ def verify_otp(request):
     if request.method == 'POST' and form.is_valid() and email:
         user = get_object_or_404(User, email=email); otp = user.otps.filter(used_at__isnull=True).order_by('-created_at').first()
         if otp and otp.is_valid() and check_password(form.cleaned_data['code'], otp.code_hash):
-            otp.used_at = __import__('django.utils.timezone', fromlist=['now']).now(); otp.save(update_fields=['used_at']); user.is_email_verified = True; user.save(update_fields=['is_email_verified']); messages.success(request, 'Email verified. Pending Admin Approval.'); request.session.pop('pending_email', None); return redirect('accounts:login')
+            otp.used_at = __import__('django.utils.timezone', fromlist=['now']).now(); otp.save(update_fields=['used_at']); user.is_email_verified = True; user.save(update_fields=['is_email_verified']); messages.success(request, 'Email verified. Complete live face enrollment before your first sign in.'); request.session['pending_biometric_email'] = user.email; request.session.pop('pending_email', None); return redirect('biometrics:enroll_page')
         form.add_error('code', 'Invalid or expired verification code.')
     return render(request, 'accounts/verify_otp.html', {'form': form, 'email': email})
 

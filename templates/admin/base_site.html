@@ -1,0 +1,6 @@
+{% extends "admin/base.html" %}
+{% load static %}
+{% block extrahead %}
+  {{ block.super }}
+  <script src="{% static 'js/csrf_refresh.js' %}"></script>
+{% endblock %}

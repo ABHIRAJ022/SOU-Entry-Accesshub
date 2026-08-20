@@ -1,25 +1,37 @@
 from django.conf import settings
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
-from .models import EmailOTP, User
+from .models import Branch, EmailOTP, User
 
 @override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
 class AuthenticationContractTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(email='student@example.com', password='StrongPassword123!', full_name='Test Student', enrollment_number='STU-001')
+        self.branch = Branch.objects.create(name='Central Branch', code='CENTRAL')
+        self.user = User.objects.create_user(email='student@example.com', password='StrongPassword123!', full_name='Test Student', enrollment_number='STU-001', branch=self.branch)
         self.user.is_email_verified = True
         self.user.save(update_fields=['is_email_verified'])
 
     def test_student_requires_admin_approval(self):
-        response = self.client.post(reverse('accounts:login'), {'username': self.user.email, 'password': 'StrongPassword123!'})
+        response = self.client.post(reverse('accounts:login'), {'role': User.Role.STUDENT, 'username': self.user.email, 'password': 'StrongPassword123!'})
         self.assertEqual(response.status_code, 200)
         self.assertNotIn('_auth_user_id', self.client.session)
 
     def test_student_can_login_after_approval(self):
         self.user.is_approved_by_admin = True
         self.user.save(update_fields=['is_approved_by_admin'])
-        response = self.client.post(reverse('accounts:login'), {'username': self.user.email, 'password': 'StrongPassword123!'})
+        session = self.client.session
+        session['live_face_verified_email'] = self.user.email
+        session['live_face_verified_at'] = __import__('time').time()
+        session.save()
+        response = self.client.post(reverse('accounts:login'), {'role': User.Role.STUDENT, 'username': self.user.email, 'password': 'StrongPassword123!'})
         self.assertRedirects(response, reverse('dashboard:home'))
+
+    def test_login_rejects_mismatched_role(self):
+        self.user.is_approved_by_admin = True
+        self.user.save(update_fields=['is_approved_by_admin'])
+        response = self.client.post(reverse('accounts:login'), {'role': User.Role.SECURITY, 'username': self.user.email, 'password': 'StrongPassword123!'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'selected account type does not match')
 
     def test_https_localhost_origin_is_trusted_for_login(self):
         client = Client(enforce_csrf_checks=True)
@@ -27,7 +39,7 @@ class AuthenticationContractTests(TestCase):
         token = client.cookies[settings.CSRF_COOKIE_NAME].value
         response = client.post(
             reverse('accounts:login'),
-            {'username': self.user.email, 'password': 'StrongPassword123!'},
+            {'role': User.Role.STUDENT, 'username': self.user.email, 'password': 'StrongPassword123!'},
             HTTP_ORIGIN='https://localhost:8000',
             HTTP_X_CSRFTOKEN=token,
         )
@@ -51,6 +63,8 @@ class AuthenticationContractTests(TestCase):
 
     def test_registration_uses_local_email_backend(self):
         response = self.client.post(reverse('accounts:register'), {
+            'role': User.Role.STUDENT,
+            'branch': self.branch.pk,
             'email': 'newstudent@example.com',
             'full_name': 'New Student',
             'enrollment_number': 'STU-002',
@@ -76,6 +90,8 @@ class AuthenticationContractTests(TestCase):
     )
     def test_registration_handles_unavailable_smtp(self):
         response = self.client.post(reverse('accounts:register'), {
+            'role': User.Role.STUDENT,
+            'branch': self.branch.pk,
             'email': 'smtp-failure@example.com',
             'full_name': 'SMTP Failure',
             'enrollment_number': 'STU-003',
@@ -86,6 +102,26 @@ class AuthenticationContractTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'could not send the verification email')
         self.assertFalse(User.objects.filter(email='smtp-failure@example.com').exists())
+
+    def test_registration_persists_staff_roles(self):
+        for role, email, enrollment in ((User.Role.ADMIN, 'admin@example.com', ''), (User.Role.SECURITY, 'security@example.com', '')):
+            response = self.client.post(reverse('accounts:register'), {
+                'role': role, 'email': email, 'full_name': role.title(),
+                'enrollment_number': enrollment, 'phone_number': '9601270941',
+                'password1': 'StrongPassword123!', 'password2': 'StrongPassword123!',
+            })
+            self.assertRedirects(response, reverse('accounts:verify_otp'))
+            user = User.objects.get(email=email)
+            self.assertEqual(user.role, role)
+            self.assertFalse(user.is_approved_by_super_admin)
+
+    def test_staff_cannot_login_before_super_admin_approval(self):
+        staff = User.objects.create_user(email='staff-pending@example.com', password='StrongPassword123!', full_name='Pending Staff', role=User.Role.SECURITY)
+        staff.is_email_verified = True
+        staff.save(update_fields=['is_email_verified'])
+        response = self.client.post(reverse('accounts:login'), {'role': User.Role.SECURITY, 'username': staff.email, 'password': 'StrongPassword123!'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Verify your email and await admin approval')
 
 class HealthContractTests(TestCase):
     def test_health_endpoint_reports_operational_database(self):
