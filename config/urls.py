@@ -2,11 +2,12 @@ from django.contrib import admin
 from django.urls import include, path
 from allauth.urls import build_provider_urlpatterns
 from accounts import views as account_views
-from core.views import health_check
+from core.views import health_check, static_asset
 from core.seo import robots_txt, sitemap_xml
 from dashboard import views as dashboard_views
 
 urlpatterns = [
+    path('static/<path:path>', static_asset, name='static_asset'),
     path('admin/', admin.site.urls),
     path('accounts/', include('accounts.urls')),
     path('accounts/', include(build_provider_urlpatterns())),
