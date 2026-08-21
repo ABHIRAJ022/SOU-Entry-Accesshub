@@ -10,6 +10,7 @@ from django.core.paginator import Paginator
 from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods
+from django.views.decorators.http import require_POST
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django_ratelimit.decorators import ratelimit
 from .forms import OTPForm, RegistrationForm, SecureLoginForm
@@ -85,5 +86,6 @@ def send_otp(user):
     EmailOTP.objects.create(user=user, code_hash=make_password(code))
     send_mail('Smart Campus email verification', f'Your verification code is {code}. It expires in 10 minutes.', settings.DEFAULT_FROM_EMAIL, [user.email], fail_silently=False)
 
+@require_POST
 def logout_view(request): logout(request); return redirect('accounts:login')
 def home(request): return redirect('dashboard:home') if request.user.is_authenticated else redirect('accounts:login')

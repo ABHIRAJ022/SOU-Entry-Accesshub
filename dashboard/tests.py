@@ -181,7 +181,7 @@ class StudentDashboardTests(TestCase):
         student.save(update_fields=['is_email_verified', 'is_approved_by_admin'])
         token, _ = CampusToken.issue(student, 30)
         self.client.force_login(student)
-        self.client.get(reverse('accounts:logout'))
+        self.client.post(reverse('accounts:logout'))
         login_response = self.client.post(reverse('accounts:login'), {'role': User.Role.STUDENT, 'username': student.email, 'password': 'StrongPassword123!'})
         self.assertRedirects(login_response, reverse('dashboard:home'))
         dashboard_response = self.client.get(reverse('dashboard:home'))

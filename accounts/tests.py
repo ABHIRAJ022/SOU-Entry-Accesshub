@@ -78,6 +78,11 @@ class AuthenticationContractTests(TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertIn(settings.CSRF_COOKIE_NAME, self.client.cookies)
 
+    def test_logout_requires_post(self):
+        self.client.force_login(self.user)
+        self.assertEqual(self.client.get(reverse('accounts:logout')).status_code, 405)
+        self.assertRedirects(self.client.post(reverse('accounts:logout')), reverse('accounts:login'))
+
     def test_registration_uses_local_email_backend(self):
         response = self.client.post(reverse('accounts:register'), {
             'role': User.Role.STUDENT,

@@ -34,7 +34,7 @@
 				<span data-health-badge class="health-pill"><span class="health-dot"></span>Checking system</span>
 				<button class="theme-button" data-theme-toggle type="button" aria-label="Toggle color theme" aria-pressed="false"></button>
 				{% if request.user.is_authenticated %}
-					<a href="{% url 'accounts:logout' %}" class="btn btn-sm btn-dark rounded-pill px-3">Sign out</a>
+					<form method="post" action="{% url 'accounts:logout' %}" class="d-inline">{% csrf_token %}<button type="submit" class="btn btn-sm btn-dark rounded-pill px-3">Sign out</button></form>
 				{% endif %}
 			</div>
 		</div>
