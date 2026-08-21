@@ -121,7 +121,7 @@ SECURE_CONTENT_TYPE_NOSNIFF = True; X_FRAME_OPTIONS = 'DENY'; SECURE_REFERRER_PO
 CONTENT_SECURITY_POLICY = {'DIRECTIVES': {
     'default-src': ("'self'",), 'script-src': ("'self'", 'https://cdn.jsdelivr.net'),
     'style-src': ("'self'", 'https://cdn.jsdelivr.net'), 'font-src': ("'self'", 'https://cdn.jsdelivr.net'),
-    'img-src': ("'self'", 'data:'), 'connect-src': ("'self'",),
+    'img-src': ("'self'", 'data:', 'https://res.cloudinary.com'), 'connect-src': ("'self'",),
 }}
 CORS_ALLOWED_ORIGINS = [origin.strip() for origin in os.getenv('CORS_ALLOWED_ORIGINS', '').split(',') if origin.strip()]
 CORS_ALLOW_CREDENTIALS = True
@@ -141,7 +141,13 @@ if not DEBUG:
 
 RATELIMIT_ENABLE = True
 REST_FRAMEWORK = {'DEFAULT_THROTTLE_CLASSES': ['rest_framework.throttling.AnonRateThrottle', 'rest_framework.throttling.UserRateThrottle'], 'DEFAULT_THROTTLE_RATES': {'anon': '60/minute', 'user': '120/minute'}}
-SOCIALACCOUNT_PROVIDERS = {'google': {'SCOPE': ['profile', 'email'], 'AUTH_PARAMS': {'access_type': 'online'}}}
+GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '')
+GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET', '')
+SOCIALACCOUNT_PROVIDERS = {'google': {
+    'SCOPE': ['profile', 'email'],
+    'AUTH_PARAMS': {'access_type': 'online'},
+    'APP': {'client_id': GOOGLE_CLIENT_ID, 'secret': GOOGLE_CLIENT_SECRET, 'key': ''},
+}}
 SOCIALACCOUNT_ADAPTER = 'accounts.adapters.CampusSocialAccountAdapter'
 ACCOUNT_LOGIN_METHODS = {'email'}; ACCOUNT_SIGNUP_FIELDS = ['email*', 'password1*', 'password2*']; ACCOUNT_EMAIL_VERIFICATION = 'mandatory'
 IDENTITY_MAX_REQUEST_BYTES = int(os.getenv('IDENTITY_MAX_REQUEST_BYTES', '400000'))

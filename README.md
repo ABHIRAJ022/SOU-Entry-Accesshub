@@ -71,6 +71,7 @@ For local development, leave `DJANGO_DEBUG=True` and omit `DATABASE_URL` and `CL
 | `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD` | SMTP credentials |
 | `EMAIL_USE_TLS` | Enable SMTP TLS |
 | `DEFAULT_FROM_EMAIL` | Notification sender |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google OAuth credentials |
 
 Do not put real credentials in source code, static JavaScript, templates, or committed files.
 

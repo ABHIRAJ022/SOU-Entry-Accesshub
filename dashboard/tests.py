@@ -2,6 +2,7 @@ import base64
 import time
 from io import BytesIO
 from django.test import TestCase
+from django.core.cache import cache
 from django.urls import reverse
 from django.utils import timezone
 from datetime import timedelta
@@ -14,6 +15,9 @@ from .token_utils import signed_payload, verify_signed_payload
 
 
 class StudentDashboardTests(TestCase):
+    def setUp(self):
+        cache.clear()
+
     def _image(self):
         output = BytesIO()
         Image.new('RGB', (320, 240), (128, 128, 128)).save(output, format='JPEG')

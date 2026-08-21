@@ -6,7 +6,11 @@ from django.contrib.sites.models import Site
 from allauth.socialaccount.models import SocialApp
 
 
-@override_settings(SITE_URL='https://campus.example.com')
+@override_settings(
+    SITE_URL='https://campus.example.com',
+    ALLOWED_HOSTS=['testserver', 'localhost', '.app.github.dev'],
+    SOCIALACCOUNT_PROVIDERS={'google': {'SCOPE': ['profile', 'email'], 'AUTH_PARAMS': {'access_type': 'online'}}},
+)
 class SeoTests(TestCase):
     def test_robots_and_sitemap_are_valid(self):
         robots = self.client.get(reverse('robots_txt'))
@@ -33,6 +37,12 @@ class SeoTests(TestCase):
     def test_google_redirect_uses_forwarded_codespaces_host(self):
         app = SocialApp.objects.create(provider='google', name='Test Google', client_id='test-client', secret='test-secret')
         app.sites.add(Site.objects.get_current())
+        response = self.client.get(
+            '/accounts/google/login/',
+            HTTP_HOST='localhost:8000',
+            HTTP_X_FORWARDED_HOST='fantastic-space-guacamole-4qw7rx99754xfq6x4-8000.app.github.dev',
+            HTTP_X_FORWARDED_PROTO='https',
+        )
         response = self.client.post(
             '/accounts/google/login/',
             HTTP_HOST='localhost:8000',
