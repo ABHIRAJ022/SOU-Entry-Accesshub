@@ -6,7 +6,8 @@ Django application for student campus tokens, webcam audit snapshots, signed QR 
 
 ```mermaid
 flowchart LR
-  Browser[Student / Admin / Guard browser] --> Vercel[Vercel Python WSGI]
+  Browser[Student / Admin / Guard browser] --> Hosting[Netlify public URL]
+  Hosting --> Vercel[Vercel Python WSGI]
   Vercel --> Django[Django application]
   Django --> DB[(PostgreSQL)]
   Django --> Cloudinary[Cloudinary media]
@@ -84,7 +85,13 @@ Administrators can download:
 
 Both endpoints require an authenticated administrator. The XLSX report is created in memory with `openpyxl`; no report file is written to server disk.
 
-## Vercel Deployment Without Docker
+## Netlify Public URL with Django Backend
+
+Netlify does not provide a native Python WSGI runtime. This repository includes `netlify.toml` as a reverse proxy to the deployed Django backend. Netlify supplies the public URL while the Vercel Python function continues to run Django, PostgreSQL, Cloudinary, authentication, and admin requests.
+
+Before deploying the Netlify site, replace the backend URL in `netlify.toml` if the Vercel deployment URL changes. Add the Netlify site domain to the backend's `DJANGO_SITE_URL`, `DJANGO_ALLOWED_HOSTS`, `DJANGO_CSRF_TRUSTED_ORIGINS`, and `CORS_ALLOWED_ORIGINS` variables. Set `NETLIFY=true` on the backend so `*.netlify.app` preview hosts are accepted automatically.
+
+## Vercel Django Backend
 
 This project deliberately contains no Dockerfile or Docker build configuration.
 

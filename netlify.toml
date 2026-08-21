@@ -1,0 +1,8 @@
+[build]
+  publish = "."
+
+[[redirects]]
+  from = "/*"
+  to = "https://smart-entry-token-point-pts7pktuj.vercel.app/:splat"
+  status = 200
+  force = true

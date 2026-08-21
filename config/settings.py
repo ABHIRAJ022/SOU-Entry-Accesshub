@@ -12,6 +12,7 @@ def env_bool(name, default=False):
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'dev-only-change-this-secret-key')
 DEBUG = env_bool('DJANGO_DEBUG', True)
 IS_VERCEL = os.getenv('VERCEL') == '1'
+IS_NETLIFY = os.getenv('NETLIFY') == 'true'
 if not DEBUG and (SECRET_KEY == 'dev-only-change-this-secret-key' or not os.getenv('JWT_SECRET')):
     raise RuntimeError('DJANGO_SECRET_KEY and JWT_SECRET must be configured in production.')
 JWT_SECRET = os.getenv('JWT_SECRET', SECRET_KEY)
@@ -38,6 +39,13 @@ if IS_VERCEL or '.vercel.app' in ALLOWED_HOSTS:
     vercel_origin = 'https://*.vercel.app'
     if vercel_origin not in CSRF_TRUSTED_ORIGINS:
         CSRF_TRUSTED_ORIGINS.append(vercel_origin)
+if IS_NETLIFY or '.netlify.app' in ALLOWED_HOSTS:
+    netlify_host = '.netlify.app'
+    if netlify_host not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(netlify_host)
+    netlify_origin = 'https://*.netlify.app'
+    if netlify_origin not in CSRF_TRUSTED_ORIGINS:
+        CSRF_TRUSTED_ORIGINS.append(netlify_origin)
 if codespace_name:
     codespace_origin = f'https://{codespace_host}'
     if codespace_origin not in CSRF_TRUSTED_ORIGINS:
