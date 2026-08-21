@@ -63,7 +63,7 @@ def admin_dashboard(request):
         'is_super_admin': request.user.is_superuser,
         'branch': request.user.branch,
         'total_students': students.count(),
-        'pending': students.filter(is_approved_by_admin=False, is_email_verified=True).count(),
+        'pending': students.filter(is_approved_by_admin=False, is_active=True, is_email_verified=True).count(),
         'active_staff': User.objects.filter(role=User.Role.SECURITY, is_active=True, is_approved_by_super_admin=True).count(),
     })
 
