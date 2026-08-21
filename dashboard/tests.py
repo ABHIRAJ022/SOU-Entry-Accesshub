@@ -70,6 +70,23 @@ class StudentDashboardTests(TestCase):
         self.assertEqual(self.client.post(url, {'action': 'approve'}).status_code, 200)
         self.assertEqual(self.client.post(reverse('dashboard:approve_user', args=[other_student.id]), {'action': 'approve'}).status_code, 403)
 
+    def test_approved_student_can_be_revoked(self):
+        branch = Branch.objects.create(name='Revoke Branch', code='REVOKE')
+        admin = User.objects.create_user(email='revoke-admin@example.com', password='StrongPassword123!', full_name='Revoke Admin', role=User.Role.ADMIN, branch=branch)
+        admin.is_email_verified = True
+        admin.is_approved_by_super_admin = True
+        admin.save(update_fields=['is_email_verified', 'is_approved_by_super_admin'])
+        student = User.objects.create_user(email='revoke-student@example.com', password='StrongPassword123!', full_name='Revoke Student', enrollment_number='REV-001', branch=branch)
+        student.is_email_verified = True
+        student.is_approved_by_admin = True
+        student.save(update_fields=['is_email_verified', 'is_approved_by_admin'])
+        self.client.force_login(admin)
+        response = self.client.post(reverse('dashboard:approve_user', args=[student.id]), {'action': 'revoke'})
+        self.assertEqual(response.status_code, 200)
+        student.refresh_from_db()
+        self.assertFalse(student.is_approved_by_admin)
+        self.assertFalse(student.is_active)
+
     def test_approved_student_can_generate_duration_token_after_identity_verification(self):
         branch = Branch.objects.create(name='Token Branch', code='TOKEN')
         student = User.objects.create_user(email='token-student@example.com', password='StrongPassword123!', full_name='Token Student', enrollment_number='TOK-001', branch=branch)

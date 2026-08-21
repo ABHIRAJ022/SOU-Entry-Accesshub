@@ -74,7 +74,7 @@ def security_dashboard(request): return render(request, 'dashboard/security.html
 @role_required(User.Role.ADMIN)
 def approve_user(request, user_id):
     user = get_object_or_404(User, id=user_id); action = request.POST.get('action')
-    if action not in {'approve', 'reject'}: return JsonResponse({'error': 'Invalid action'}, status=400)
+    if action not in {'approve', 'reject', 'revoke'}: return JsonResponse({'error': 'Invalid action'}, status=400)
     if user.role == User.Role.STUDENT:
         if not request.user.is_superuser and (request.user.role != User.Role.ADMIN or request.user.branch_id != user.branch_id):
             return JsonResponse({'error': 'You can only manage students in your assigned branch.'}, status=403)
@@ -83,14 +83,14 @@ def approve_user(request, user_id):
         user.save(update_fields=['is_approved_by_admin', 'is_active'])
         if action == 'approve':
             send_account_approved(user)
-        return JsonResponse({'status': 'approved' if action == 'approve' else 'rejected'})
+        return JsonResponse({'status': 'approved' if action == 'approve' else ('revoked' if action == 'revoke' else 'rejected')})
     if user.role in {User.Role.ADMIN, User.Role.SECURITY} and request.user.is_superuser:
         user.is_approved_by_super_admin = action == 'approve'
         user.is_active = action == 'approve'
         user.save(update_fields=['is_approved_by_super_admin', 'is_active'])
         if action == 'approve':
             send_account_approved(user)
-        return JsonResponse({'status': 'approved' if action == 'approve' else 'rejected'})
+        return JsonResponse({'status': 'approved' if action == 'approve' else ('revoked' if action == 'revoke' else 'rejected')})
     return JsonResponse({'error': 'Only the main super administrator can manage staff accounts.'}, status=403)
 
 @require_GET

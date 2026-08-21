@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.core.cache import cache
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from .models import Branch, EmailOTP, User
@@ -6,6 +7,7 @@ from .models import Branch, EmailOTP, User
 @override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
 class AuthenticationContractTests(TestCase):
     def setUp(self):
+        cache.clear()
         self.branch = Branch.objects.create(name='Central Branch', code='CENTRAL')
         self.user = User.objects.create_user(email='student@example.com', password='StrongPassword123!', full_name='Test Student', enrollment_number='STU-001', branch=self.branch)
         self.user.is_email_verified = True
@@ -42,6 +44,21 @@ class AuthenticationContractTests(TestCase):
             {'role': User.Role.STUDENT, 'username': self.user.email, 'password': 'StrongPassword123!'},
             HTTP_ORIGIN='https://localhost:8000',
             HTTP_X_CSRFTOKEN=token,
+        )
+        self.assertEqual(response.status_code, 200)
+
+    @override_settings(CSRF_TRUSTED_ORIGINS=['https://*.vercel.app'], ALLOWED_HOSTS=['testserver', '.vercel.app'])
+    def test_vercel_preview_origin_is_trusted_for_login(self):
+        client = Client(enforce_csrf_checks=True)
+        client.get(reverse('accounts:login'), HTTP_HOST='smart-entry-token-point-pts7pktuj.vercel.app', secure=True)
+        token = client.cookies[settings.CSRF_COOKIE_NAME].value
+        response = client.post(
+            reverse('accounts:login'),
+            {'role': User.Role.STUDENT, 'username': self.user.email, 'password': 'StrongPassword123!'},
+            HTTP_HOST='smart-entry-token-point-pts7pktuj.vercel.app',
+            HTTP_ORIGIN='https://smart-entry-token-point-pts7pktuj.vercel.app',
+            HTTP_X_CSRFTOKEN=token,
+            secure=True,
         )
         self.assertEqual(response.status_code, 200)
 

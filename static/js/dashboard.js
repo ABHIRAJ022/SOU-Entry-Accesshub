@@ -126,7 +126,10 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('[data-approval]').forEach((button) => button.addEventListener('click', async () => {
     button.disabled = true;
     const response = await fetch(button.dataset.url, {method: 'POST', headers: {'X-CSRFToken': csrfToken(), 'Accept': 'application/json'}, body: new URLSearchParams({action: button.dataset.action})});
-    if (response.ok) button.closest('[data-user-row]').remove();
+    if (response.ok) {
+      if (button.dataset.action === 'revoke') window.location.reload();
+      else button.closest('[data-user-row]').remove();
+    }
     else if (response.status === 403) window.location.reload();
     else button.disabled = false;
   }));

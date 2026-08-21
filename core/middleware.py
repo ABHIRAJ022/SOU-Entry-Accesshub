@@ -1,3 +1,9 @@
+import logging
+from django.db.utils import OperationalError, ProgrammingError
+
+logger = logging.getLogger(__name__)
+
+
 class SecurityHeadersMiddleware:
     def __init__(self, get_response):
         self.get_response = get_response
@@ -28,11 +34,14 @@ class AuditLoggingMiddleware:
             from .models import AuditLog
             event, action = self._event(request.path)
             user = request.user if getattr(request.user, 'is_authenticated', False) else None
-            AuditLog.objects.create(
-                event=event, action=action, status=str(response.status_code), user=user,
-                ip_address=self._ip(request), user_agent=request.META.get('HTTP_USER_AGENT', '')[:1000],
-                path=request.path, metadata={'method': request.method},
-            )
+            try:
+                AuditLog.objects.create(
+                    event=event, action=action, status=str(response.status_code), user=user,
+                    ip_address=self._ip(request), user_agent=request.META.get('HTTP_USER_AGENT', '')[:1000],
+                    path=request.path, metadata={'method': request.method},
+                )
+            except (OperationalError, ProgrammingError):
+                logger.exception('Audit log write skipped because the database schema is unavailable.')
         return response
 
     @staticmethod
