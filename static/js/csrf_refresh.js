@@ -12,7 +12,7 @@
 
   document.addEventListener('submit', async (event) => {
     const form = event.target;
-    if (!(form instanceof HTMLFormElement) || form.dataset.csrfRefreshing === '1' || form.method.toLowerCase() !== 'post') return;
+    if (!(form instanceof HTMLFormElement) || form.dataset.csrfRefreshing === '1' || form.dataset.csrfRefresh === 'false' || form.method.toLowerCase() !== 'post') return;
     event.preventDefault();
     form.dataset.csrfRefreshing = '1';
     const submit = form.querySelector('[type="submit"]');
@@ -20,7 +20,7 @@
     try {
       const token = await refreshToken(form);
       const field = form.querySelector('input[name="csrfmiddlewaretoken"]');
-      if (!token || !field) { window.location.reload(); return; }
+      if (!token || !field) { HTMLFormElement.prototype.submit.call(form); return; }
       field.value = token;
       HTMLFormElement.prototype.submit.call(form);
     } catch (error) {
