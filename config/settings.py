@@ -31,6 +31,7 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 USE_X_FORWARDED_HOST = True
 SEO_SITE_NAME = 'Smart Campus'
 SEO_DEFAULT_DESCRIPTION = 'Smart Campus provides secure, role-based campus entry and token management for students, administrators, and security staff.'
+GOOGLE_SITE_VERIFICATION = os.getenv('GOOGLE_SITE_VERIFICATION', '')
 CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in os.getenv(
     'DJANGO_CSRF_TRUSTED_ORIGINS',
     'http://localhost:8000,https://localhost:8000,http://127.0.0.1:8000,https://127.0.0.1:8000',

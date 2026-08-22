@@ -18,5 +18,6 @@ def seo(request):
             'description': descriptions.get(path, settings.SEO_DEFAULT_DESCRIPTION),
             'canonical': f'{settings.SITE_URL}{urlunsplit(('', '', canonical_path, '', ''))}',
             'robots': 'noindex, nofollow' if path.startswith(private_prefixes) or path != '/' else 'index, follow',
+            'google_site_verification': settings.GOOGLE_SITE_VERIFICATION,
         },
     }

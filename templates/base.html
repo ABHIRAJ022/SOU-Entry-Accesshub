@@ -7,6 +7,7 @@
 	<meta name="theme-color" content="#102a43">
 	<meta name="description" content="{{ seo.description }}">
 	<meta name="robots" content="{{ seo.robots }}">
+	{% if seo.google_site_verification %}<meta name="google-site-verification" content="{{ seo.google_site_verification }}">{% endif %}
 	<link rel="canonical" href="{{ seo.canonical }}">
 	<meta property="og:type" content="website">
 	<meta property="og:site_name" content="{{ seo.site_name }}">
