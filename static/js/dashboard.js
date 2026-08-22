@@ -135,5 +135,17 @@ document.addEventListener('DOMContentLoaded', () => {
   }));
   const search = document.querySelector('[data-student-search]');
   const results = document.querySelector('[data-student-results]');
-  if (search) search.addEventListener('input', async () => { const response = await fetch(`/dashboard/students/lookup/?q=${encodeURIComponent(search.value)}`); const data = await response.json(); results.innerHTML = data.results.map((student) => `<tr><td>${student.name}</td><td>${student.enrollment_number}</td><td>${student.email_verified ? 'Verified' : 'Unverified'}</td><td>${student.approved ? 'Approved' : 'Pending'}</td></tr>`).join(''); });
+  if (search) search.addEventListener('input', async () => {
+    const response = await fetch(`/dashboard/students/lookup/?q=${encodeURIComponent(search.value)}`, {credentials: 'same-origin', headers: {'Accept': 'application/json'}});
+    const data = await response.json();
+    results.replaceChildren(...data.results.map((student) => {
+      const row = document.createElement('tr');
+      [student.name, student.enrollment_number, student.email_verified ? 'Verified' : 'Unverified', student.approved ? 'Approved' : 'Pending'].forEach((value) => {
+        const cell = document.createElement('td');
+        cell.textContent = value;
+        row.append(cell);
+      });
+      return row;
+    }));
+  });
 });

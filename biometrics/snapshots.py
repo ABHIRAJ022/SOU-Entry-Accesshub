@@ -5,6 +5,7 @@ from io import BytesIO
 from PIL import Image, ImageStat, UnidentifiedImageError
 
 MAX_SNAPSHOT_BYTES = 200 * 1024
+Image.MAX_IMAGE_PIXELS = 4_000_000
 
 
 class SnapshotError(Exception):
@@ -34,7 +35,7 @@ def process_webcam_snapshot(payload):
                 if encoded.tell() <= MAX_SNAPSHOT_BYTES:
                     break
             snapshot = encoded.getvalue()
-    except (binascii.Error, ValueError, UnidentifiedImageError) as exc:
+    except (binascii.Error, Image.DecompressionBombError, Image.DecompressionBombWarning, ValueError, UnidentifiedImageError) as exc:
         raise SnapshotError('The webcam photo could not be decoded.') from exc
     if len(snapshot) > MAX_SNAPSHOT_BYTES:
         raise SnapshotError('The webcam photo must be no larger than 200KB.')

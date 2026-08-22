@@ -37,17 +37,6 @@ CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in os.getenv(
     'DJANGO_CSRF_TRUSTED_ORIGINS',
     'http://localhost:8000,https://localhost:8000,http://127.0.0.1:8000,https://127.0.0.1:8000',
 ).split(',') if origin.strip()]
-if IS_VERCEL or '.vercel.app' in ALLOWED_HOSTS:
-    vercel_origin = 'https://*.vercel.app'
-    if vercel_origin not in CSRF_TRUSTED_ORIGINS:
-        CSRF_TRUSTED_ORIGINS.append(vercel_origin)
-if IS_NETLIFY or '.netlify.app' in ALLOWED_HOSTS:
-    netlify_host = '.netlify.app'
-    if netlify_host not in ALLOWED_HOSTS:
-        ALLOWED_HOSTS.append(netlify_host)
-    netlify_origin = 'https://*.netlify.app'
-    if netlify_origin not in CSRF_TRUSTED_ORIGINS:
-        CSRF_TRUSTED_ORIGINS.append(netlify_origin)
 if codespace_name:
     codespace_origin = f'https://{codespace_host}'
     if codespace_origin not in CSRF_TRUSTED_ORIGINS:

@@ -16,6 +16,7 @@ from .models import CampusToken, TokenAudit
 from .token_utils import pdf_pass, qr_png, signed_payload, token_from_signed_payload
 from .models import CampusLocation
 from .notifications import send_account_approved, send_token_created, send_token_expiry_notice
+from biometrics.views import has_recent_identity_verification
 
 TOKEN_DURATIONS = {30, 60, 120, 180, 240, 300, 360, 420, 480}
 
@@ -105,6 +106,8 @@ def student_lookup(request):
 def issue_token(request):
     if not request.user.can_login:
         return JsonResponse({'error': 'Your account must be verified and approved before requesting a token.'}, status=403)
+    if int(request.META.get('CONTENT_LENGTH') or 0) > 450000:
+        return JsonResponse({'error': 'The token request is too large.'}, status=413)
     try:
         payload = json.loads(request.body or '{}')
         duration = int(payload.get('duration_minutes', 30))
@@ -116,6 +119,8 @@ def issue_token(request):
         snapshot = process_webcam_snapshot(payload)
     except SnapshotError as exc:
         return JsonResponse({'error': str(exc)}, status=400)
+    if not has_recent_identity_verification(request):
+        return JsonResponse({'error': 'Complete identity verification before requesting a token.'}, status=403)
     with transaction.atomic():
         try:
             token, raw_token = CampusToken.issue(request.user, duration)
@@ -203,7 +208,8 @@ def create_location(request):
 @require_POST
 @role_required(User.Role.ADMIN)
 def update_location(request, location_id):
-    location = get_object_or_404(CampusLocation, pk=location_id)
+    locations = CampusLocation.objects.all() if request.user.is_superuser else CampusLocation.objects.filter(created_by__branch_id=request.user.branch_id)
+    location = get_object_or_404(locations, pk=location_id)
     try:
         payload = json.loads(request.body)
         latitude, longitude = _coordinates(payload)
@@ -225,7 +231,8 @@ def update_location(request, location_id):
 @require_POST
 @role_required(User.Role.ADMIN)
 def delete_location(request, location_id):
-    location = get_object_or_404(CampusLocation, pk=location_id)
+    locations = CampusLocation.objects.all() if request.user.is_superuser else CampusLocation.objects.filter(created_by__branch_id=request.user.branch_id)
+    location = get_object_or_404(locations, pk=location_id)
     location.is_active = False
     location.save(update_fields=['is_active', 'updated_at'])
     return JsonResponse({'deleted': True})
@@ -241,10 +248,13 @@ def validate_token(request):
         token = None
     if not token or not token.user.is_active or not token.user.can_login:
         return JsonResponse({'valid': False, 'error': 'Invalid token signature or student approval.'}, status=400)
-    if token.used_at or token.revoked_at or timezone.now() >= token.expires_at:
-        token.mark_expired()
-        return JsonResponse({'valid': False, 'error': 'Token is expired, revoked, or already used.'}, status=409)
-    token.used_at = timezone.now()
-    token.used_by = request.user
-    token.save(update_fields=['used_at', 'used_by'])
+    with transaction.atomic():
+        token = CampusToken.objects.select_for_update().select_related('user').filter(pk=token.pk).first()
+        if not token or token.used_at or token.revoked_at or timezone.now() >= token.expires_at:
+            if token:
+                token.mark_expired()
+            return JsonResponse({'valid': False, 'error': 'Token is expired, revoked, or already used.'}, status=409)
+        token.used_at = timezone.now()
+        token.used_by = request.user
+        token.save(update_fields=['used_at', 'used_by'])
     return JsonResponse({'valid': True, 'student': token.user.full_name, 'enrollment_number': token.user.enrollment_number, 'expires_at': token.expires_at.isoformat()})

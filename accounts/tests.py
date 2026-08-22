@@ -172,4 +172,4 @@ class HealthContractTests(TestCase):
         response = self.client.get(reverse('health'))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()['status'], 'operational')
-        self.assertEqual(response.json()['database'], 'ok')
+        self.assertNotIn('database', response.json())

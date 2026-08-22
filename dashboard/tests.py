@@ -26,6 +26,13 @@ class StudentDashboardTests(TestCase):
     def _token_payload(self, duration=30):
         return {'duration_minutes': duration, 'capture_mode': 'webcam', 'captured_at': time.time(), 'image': self._image()}
 
+    def _set_identity_verification(self, user):
+        verification = IdentityVerification.objects.create(user=user, audit_snapshot=b'audit', snapshot_size=5, verification_method='pin', expires_at=timezone.now() + timedelta(minutes=5))
+        session = self.client.session
+        session['identity_verification_id'] = verification.pk
+        session['identity_verified_at'] = timezone.now().timestamp()
+        session.save()
+
     def test_approved_student_sees_approved_status(self):
         user = User.objects.create_user(
             email='approved@example.com', password='StrongPassword123!',
@@ -125,6 +132,7 @@ class StudentDashboardTests(TestCase):
         student.is_approved_by_admin = True
         student.save(update_fields=['is_email_verified', 'is_approved_by_admin'])
         self.client.force_login(student)
+        self._set_identity_verification(student)
         endpoint = reverse('dashboard:issue_token')
         first = self.client.post(endpoint, self._token_payload(), content_type='application/json', secure=True)
         self.assertEqual(first.status_code, 200)
@@ -142,6 +150,7 @@ class StudentDashboardTests(TestCase):
         student.is_approved_by_admin = True
         student.save(update_fields=['is_email_verified', 'is_approved_by_admin'])
         self.client.force_login(student)
+        self._set_identity_verification(student)
         response = self.client.post(reverse('dashboard:issue_token'), self._token_payload(60), content_type='application/json', secure=True)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()['generation'], 1)

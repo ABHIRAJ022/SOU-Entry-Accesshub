@@ -11,7 +11,29 @@ document.addEventListener('DOMContentLoaded', async () => {
     markers.splice(0).forEach((marker) => map.removeLayer(marker));
     items.forEach((location) => {
       const marker = L.marker([location.latitude, location.longitude], {draggable: element.dataset.locationAdmin === 'true'}).addTo(map);
-      marker.bindPopup(`<strong>${location.name}</strong><br>${location.category_label}<br>${location.description || ''}<br><button data-route-lat="${location.latitude}" data-route-lng="${location.longitude}">Route here</button>${element.dataset.locationAdmin === 'true' ? `<br><button data-delete-location="${location.id}">Deactivate</button>` : ''}`);
+      const popup = document.createElement('div');
+      const title = document.createElement('strong');
+      title.textContent = location.name;
+      popup.append(title, document.createElement('br'));
+      const category = document.createElement('span');
+      category.textContent = location.category_label;
+      popup.append(category, document.createElement('br'));
+      const description = document.createElement('span');
+      description.textContent = location.description || '';
+      popup.append(description, document.createElement('br'));
+      const routeButton = document.createElement('button');
+      routeButton.dataset.routeLat = location.latitude;
+      routeButton.dataset.routeLng = location.longitude;
+      routeButton.textContent = 'Route here';
+      popup.append(routeButton);
+      if (element.dataset.locationAdmin === 'true') {
+        popup.append(document.createElement('br'));
+        const deleteButton = document.createElement('button');
+        deleteButton.dataset.deleteLocation = location.id;
+        deleteButton.textContent = 'Deactivate';
+        popup.append(deleteButton);
+      }
+      marker.bindPopup(popup);
       markers.push(marker);
       if (element.dataset.locationAdmin === 'true') marker.on('dragend', async () => {
         const point = marker.getLatLng();

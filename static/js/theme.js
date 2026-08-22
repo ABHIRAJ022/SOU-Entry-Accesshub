@@ -8,7 +8,12 @@
     if (!toggle) return;
     const dark = root.dataset.bsTheme === 'dark';
     toggle.setAttribute('aria-pressed', String(dark));
-    toggle.innerHTML = dark ? '<span aria-hidden="true">☼</span><span>Light mode</span>' : '<span aria-hidden="true">☾</span><span>Dark mode</span>';
+    const icon = document.createElement('span');
+    icon.setAttribute('aria-hidden', 'true');
+    icon.textContent = dark ? '☼' : '☾';
+    const label = document.createElement('span');
+    label.textContent = dark ? 'Light mode' : 'Dark mode';
+    toggle.replaceChildren(icon, label);
   };
 
   toggle?.addEventListener('click', () => {

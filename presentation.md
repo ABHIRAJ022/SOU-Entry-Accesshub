@@ -232,7 +232,6 @@ To develop a secure, cloud-deployed campus-entry platform that manages user appr
 - `reportlab`
 - `openpyxl`
 - `bleach`
-- `psutil`
 
 ## Hardware / Browser Requirements
 

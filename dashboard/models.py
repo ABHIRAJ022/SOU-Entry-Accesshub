@@ -5,6 +5,7 @@ from datetime import timedelta
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
+from accounts.models import User
 
 
 class CampusToken(models.Model):
@@ -21,6 +22,7 @@ class CampusToken(models.Model):
 
     @classmethod
     def issue(cls, user, duration_minutes=60):
+        user = User.objects.select_for_update().get(pk=user.pk)
         raw_token = secrets.token_urlsafe(32)
         latest = cls.objects.filter(user=user).order_by('-generation').first()
         generation = (latest.generation + 1) if latest else 1
