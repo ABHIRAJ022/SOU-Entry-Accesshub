@@ -11,9 +11,9 @@ def env_bool(name, default=False):
     return os.getenv(name, str(default)).lower() in {'1', 'true', 'yes', 'on'}
 
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'dev-only-change-this-secret-key')
-DEBUG = env_bool('DJANGO_DEBUG', True)
 IS_VERCEL = os.getenv('VERCEL') == '1'
 IS_NETLIFY = os.getenv('NETLIFY') == 'true'
+DEBUG = env_bool('DJANGO_DEBUG', not IS_VERCEL)
 if not DEBUG and (SECRET_KEY == 'dev-only-change-this-secret-key' or not os.getenv('JWT_SECRET')):
     raise RuntimeError('DJANGO_SECRET_KEY and JWT_SECRET must be configured in production.')
 JWT_SECRET = os.getenv('JWT_SECRET', SECRET_KEY)
@@ -32,7 +32,7 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 USE_X_FORWARDED_HOST = True
 SEO_SITE_NAME = 'Smart Campus'
 SEO_DEFAULT_DESCRIPTION = 'Smart Campus provides secure, role-based campus entry and token management for students, administrators, and security staff.'
-GOOGLE_SITE_VERIFICATION = os.getenv('GOOGLE_SITE_VERIFICATION', '')
+GOOGLE_SITE_VERIFICATION = os.getenv('GOOGLE_SITE_VERIFICATION', '').strip()
 CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in os.getenv(
     'DJANGO_CSRF_TRUSTED_ORIGINS',
     'http://localhost:8000,https://localhost:8000,http://127.0.0.1:8000,https://127.0.0.1:8000',
@@ -82,10 +82,6 @@ TEMPLATES = [{
 }]
 WSGI_APPLICATION = 'config.wsgi.application'
 ASGI_APPLICATION = 'config.asgi.application'
-<<<<<<< HEAD
-import dj_database_url
-DATABASES = {'default': dj_database_url.config(default=f'sqlite:///{BASE_DIR / "db.sqlite3"}', conn_max_age=600, conn_health_checks=True)}
-=======
 DATABASE_URL = os.getenv('DATABASE_URL', '').strip()
 if DATABASE_URL:
     database_url = urlparse(DATABASE_URL)
@@ -108,7 +104,6 @@ if DATABASE_URL:
     }}
 else:
     DATABASES = {'default': {'ENGINE': 'django.db.backends.sqlite3', 'NAME': BASE_DIR / 'db.sqlite3'}}
->>>>>>> 9a2dfa6 (V 1.1.0)
 
 AUTH_USER_MODEL = 'accounts.User'
 AUTHENTICATION_BACKENDS = ['django.contrib.auth.backends.ModelBackend', 'allauth.account.auth_backends.AuthenticationBackend']
@@ -180,15 +175,6 @@ if not DEBUG:
 
 RATELIMIT_ENABLE = True
 REST_FRAMEWORK = {'DEFAULT_THROTTLE_CLASSES': ['rest_framework.throttling.AnonRateThrottle', 'rest_framework.throttling.UserRateThrottle'], 'DEFAULT_THROTTLE_RATES': {'anon': '60/minute', 'user': '120/minute'}}
-<<<<<<< HEAD
-GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '')
-GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET', '')
-SOCIALACCOUNT_PROVIDERS = {'google': {
-    'SCOPE': ['profile', 'email'],
-    'AUTH_PARAMS': {'access_type': 'online'},
-    'APP': {'client_id': GOOGLE_CLIENT_ID, 'secret': GOOGLE_CLIENT_SECRET, 'key': ''},
-}}
-=======
 GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '').strip()
 GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET', '').strip()
 SOCIALACCOUNT_PROVIDERS = {'google': {
@@ -201,7 +187,6 @@ if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET:
         'secret': GOOGLE_CLIENT_SECRET,
         'key': '',
     }
->>>>>>> 19ce127 (V 1.1.0)
 SOCIALACCOUNT_ADAPTER = 'accounts.adapters.CampusSocialAccountAdapter'
 ACCOUNT_LOGIN_METHODS = {'email'}; ACCOUNT_SIGNUP_FIELDS = ['email*', 'password1*', 'password2*']; ACCOUNT_EMAIL_VERIFICATION = 'mandatory'
 IDENTITY_MAX_REQUEST_BYTES = int(os.getenv('IDENTITY_MAX_REQUEST_BYTES', '400000'))

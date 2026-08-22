@@ -64,6 +64,7 @@ For local development, leave `DJANGO_DEBUG=True` and omit `DATABASE_URL` and `CL
 | `DJANGO_ALLOWED_HOSTS` | Comma-separated production hosts |
 | `DJANGO_SITE_URL` | Canonical public URL |
 | `DJANGO_CSRF_TRUSTED_ORIGINS` | Trusted HTTPS origins |
+| `GOOGLE_SITE_VERIFICATION` | Search Console HTML meta verification token |
 | `DATABASE_URL` | PostgreSQL connection URL |
 | `CLOUDINARY_URL` | Cloudinary media credentials |
 | `MEDIA_URL` | Public Cloudinary media URL |
@@ -102,9 +103,10 @@ This project deliberately contains no Dockerfile or Docker build configuration.
 4. Set `DJANGO_DEBUG=False`.
 5. Set `DJANGO_ALLOWED_HOSTS` to the Vercel domain and any custom domain.
 6. Set `DJANGO_SITE_URL` and `DJANGO_CSRF_TRUSTED_ORIGINS` to HTTPS URLs.
-7. Set PostgreSQL `DATABASE_URL` and Cloudinary `CLOUDINARY_URL`.
-8. Configure SMTP credentials and a verified sender.
-9. Deploy. Vercel uses `api/index.py` as the WSGI entrypoint and `vercel.json` for routing.
+7. If using HTML tag verification, set `GOOGLE_SITE_VERIFICATION` to the exact token from Search Console and redeploy.
+8. Set PostgreSQL `DATABASE_URL` and Cloudinary `CLOUDINARY_URL`.
+9. Configure SMTP credentials and a verified sender.
+10. Deploy. Vercel uses `api/index.py` as the WSGI entrypoint and `vercel.json` for routing.
 
 The deployment build contract is in `build_files.sh`:
 

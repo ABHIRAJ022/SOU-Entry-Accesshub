@@ -9,6 +9,7 @@
 	<meta name="robots" content="{{ seo.robots }}">
 	{% if seo.google_site_verification %}<meta name="google-site-verification" content="{{ seo.google_site_verification }}">{% endif %}
 	<link rel="canonical" href="{{ seo.canonical }}">
+	{% if GOOGLE_SITE_VERIFICATION %}<meta name="google-site-verification" content="{{ GOOGLE_SITE_VERIFICATION }}">{% endif %}
 	<meta property="og:type" content="website">
 	<meta property="og:site_name" content="{{ seo.site_name }}">
 	<meta property="og:title" content="{% block og_title %}{{ seo.site_name }}{% endblock %}">

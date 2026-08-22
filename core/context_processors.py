@@ -13,6 +13,7 @@ def seo(request):
     }
     canonical_path = urlsplit(request.get_full_path())._replace(query='', fragment='').geturl()
     return {
+        'GOOGLE_SITE_VERIFICATION': settings.GOOGLE_SITE_VERIFICATION,
         'seo': {
             'site_name': settings.SEO_SITE_NAME,
             'description': descriptions.get(path, settings.SEO_DEFAULT_DESCRIPTION),
