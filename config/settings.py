@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from urllib.parse import parse_qs, unquote, urlparse
 
 from dotenv import load_dotenv
 
@@ -81,8 +82,33 @@ TEMPLATES = [{
 }]
 WSGI_APPLICATION = 'config.wsgi.application'
 ASGI_APPLICATION = 'config.asgi.application'
+<<<<<<< HEAD
 import dj_database_url
 DATABASES = {'default': dj_database_url.config(default=f'sqlite:///{BASE_DIR / "db.sqlite3"}', conn_max_age=600, conn_health_checks=True)}
+=======
+DATABASE_URL = os.getenv('DATABASE_URL', '').strip()
+if DATABASE_URL:
+    database_url = urlparse(DATABASE_URL)
+    if database_url.scheme not in {'postgres', 'postgresql'} or not database_url.path:
+        raise ValueError('DATABASE_URL must be a PostgreSQL connection URL.')
+    database_options = {
+        key: values[-1]
+        for key, values in parse_qs(database_url.query).items()
+        if values
+    }
+    database_options.setdefault('sslmode', 'require')
+    DATABASES = {'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': unquote(database_url.path.lstrip('/')),
+        'USER': unquote(database_url.username or ''),
+        'PASSWORD': unquote(database_url.password or ''),
+        'HOST': database_url.hostname or '',
+        'PORT': str(database_url.port or ''),
+        'OPTIONS': database_options,
+    }}
+else:
+    DATABASES = {'default': {'ENGINE': 'django.db.backends.sqlite3', 'NAME': BASE_DIR / 'db.sqlite3'}}
+>>>>>>> 9a2dfa6 (V 1.1.0)
 
 AUTH_USER_MODEL = 'accounts.User'
 AUTHENTICATION_BACKENDS = ['django.contrib.auth.backends.ModelBackend', 'allauth.account.auth_backends.AuthenticationBackend']
@@ -114,7 +140,7 @@ EMAIL_USE_TLS = env_bool('EMAIL_USE_TLS', False); DEFAULT_FROM_EMAIL = os.getenv
 EMAIL_BACKEND = os.getenv(
     'EMAIL_BACKEND',
     'django.core.mail.backends.smtp.EmailBackend'
-    if (not DEBUG or (EMAIL_HOST_USER and EMAIL_HOST_PASSWORD))
+    if (EMAIL_HOST_USER and EMAIL_HOST_PASSWORD)
     else 'django.core.mail.backends.console.EmailBackend',
 )
 EMAIL_TIMEOUT = int(os.getenv('EMAIL_TIMEOUT', '15'))
@@ -154,6 +180,7 @@ if not DEBUG:
 
 RATELIMIT_ENABLE = True
 REST_FRAMEWORK = {'DEFAULT_THROTTLE_CLASSES': ['rest_framework.throttling.AnonRateThrottle', 'rest_framework.throttling.UserRateThrottle'], 'DEFAULT_THROTTLE_RATES': {'anon': '60/minute', 'user': '120/minute'}}
+<<<<<<< HEAD
 GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '')
 GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET', '')
 SOCIALACCOUNT_PROVIDERS = {'google': {
@@ -161,6 +188,20 @@ SOCIALACCOUNT_PROVIDERS = {'google': {
     'AUTH_PARAMS': {'access_type': 'online'},
     'APP': {'client_id': GOOGLE_CLIENT_ID, 'secret': GOOGLE_CLIENT_SECRET, 'key': ''},
 }}
+=======
+GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '').strip()
+GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET', '').strip()
+SOCIALACCOUNT_PROVIDERS = {'google': {
+    'SCOPE': ['profile', 'email'],
+    'AUTH_PARAMS': {'access_type': 'online'},
+}}
+if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET:
+    SOCIALACCOUNT_PROVIDERS['google']['APP'] = {
+        'client_id': GOOGLE_CLIENT_ID,
+        'secret': GOOGLE_CLIENT_SECRET,
+        'key': '',
+    }
+>>>>>>> 19ce127 (V 1.1.0)
 SOCIALACCOUNT_ADAPTER = 'accounts.adapters.CampusSocialAccountAdapter'
 ACCOUNT_LOGIN_METHODS = {'email'}; ACCOUNT_SIGNUP_FIELDS = ['email*', 'password1*', 'password2*']; ACCOUNT_EMAIL_VERIFICATION = 'mandatory'
 IDENTITY_MAX_REQUEST_BYTES = int(os.getenv('IDENTITY_MAX_REQUEST_BYTES', '400000'))
