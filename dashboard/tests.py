@@ -46,6 +46,19 @@ class StudentDashboardTests(TestCase):
         self.assertContains(response, 'Approved')
         self.assertNotContains(response, 'Pending Admin Approval')
 
+    def test_approved_student_can_reach_identity_verification_before_token(self):
+        user = User.objects.create_user(
+            email='identity-link@example.com', password='StrongPassword123!',
+            full_name='Identity Link Student', enrollment_number='IDENTITY-001',
+        )
+        user.is_email_verified = True
+        user.is_approved_by_admin = True
+        user.save(update_fields=['is_email_verified', 'is_approved_by_admin'])
+        self.client.force_login(user)
+        response = self.client.get(reverse('dashboard:home'))
+        self.assertContains(response, reverse('biometrics:verify_page'))
+        self.assertContains(response, 'Verify identity')
+
     def test_pending_student_sees_pending_status(self):
         user = User.objects.create_user(
             email='pending-dashboard@example.com', password='StrongPassword123!',

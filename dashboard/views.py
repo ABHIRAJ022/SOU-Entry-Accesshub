@@ -42,6 +42,7 @@ def home(request):
     return render(request, 'dashboard/student.html', {
         'student': request.user,
         'email_verified': request.user.is_email_verified,
+        'identity_verified': has_recent_identity_verification(request),
         'approval_status': 'approved' if request.user.is_approved_by_admin else ('rejected' if not request.user.is_active else 'pending'),
         'active_token': active_token,
         'active_token_qr': 'data:image/png;base64,' + base64.b64encode(qr_png(active_token)).decode() if active_token else '',
