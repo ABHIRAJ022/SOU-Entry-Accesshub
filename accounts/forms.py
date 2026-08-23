@@ -85,18 +85,3 @@ class OTPForm(forms.Form):
         value = self.cleaned_data['code']
         if not value.isdigit(): raise ValidationError('OTP must contain six digits.')
         return value
-
-class ProfileForm(forms.ModelForm):
-    class Meta:
-        model = User
-        fields = ('full_name', 'phone_number')
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        for field in self.fields.values():
-            field.widget.attrs['class'] = 'form-control'
-
-    def clean_full_name(self):
-        value = sanitized(self.cleaned_data['full_name'])
-        if not re.fullmatch(r"[A-Za-z][A-Za-z .'-]{1,119}", value): raise ValidationError('Enter a valid full name.')
-        return value

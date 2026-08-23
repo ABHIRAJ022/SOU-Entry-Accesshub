@@ -26,7 +26,7 @@
     </div>
     <div data-token-persistent data-token-expires="{{ latest_token.expires_at|date:'c' }}" data-token-status-url="{% url 'dashboard:token_status' latest_token.public_id %}"></div>
   {% else %}
-    <p class="text-secondary">Take a clear live webcam photo, then create a signed entry pass with a 30-minute, 2-hour, or 8-hour validity period.</p>
+    <p class="text-secondary">Take a clear live webcam photo, then create a signed entry pass with a 30-minute to 8-hour validity period.</p>
   {% endif %}
   <div class="camera-stage mt-3"><video data-token-camera autoplay muted playsinline></video><p data-token-camera-status class="camera-status">Camera is off</p></div>
   <div class="d-flex gap-2 flex-wrap mt-3"><button data-token-camera-start class="btn btn-outline-secondary rounded-pill" type="button" {% if active_token %}disabled{% endif %}>Enable camera</button><button data-token-snapshot class="btn btn-outline-secondary rounded-pill" type="button" disabled>Take live photo</button></div>

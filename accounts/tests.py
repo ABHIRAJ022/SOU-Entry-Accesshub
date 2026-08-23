@@ -171,7 +171,7 @@ class AuthenticationContractTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Verify your email and await admin approval')
 
-    def test_authenticated_user_can_view_and_update_profile(self):
+    def test_authenticated_user_can_view_read_only_profile(self):
         self.client.force_login(self.user)
         response = self.client.get(reverse('accounts:profile'))
         self.assertEqual(response.status_code, 200)
@@ -181,12 +181,14 @@ class AuthenticationContractTests(TestCase):
             'full_name': 'Updated Student',
             'phone_number': '9876543210',
         })
-        self.assertRedirects(response, reverse('accounts:profile'))
+        self.assertEqual(response.status_code, 405)
         self.user.refresh_from_db()
-        self.assertEqual(self.user.full_name, 'Updated Student')
-        self.assertEqual(self.user.phone_number, '9876543210')
+        self.assertEqual(self.user.full_name, 'Test Student')
+        self.assertEqual(self.user.phone_number, '')
         self.assertFalse(self.user.profile_photo)
-        self.assertNotContains(self.client.get(reverse('accounts:profile')), 'Profile photo')
+        profile = self.client.get(reverse('accounts:profile'))
+        self.assertContains(profile, 'managed by campus administration')
+        self.assertNotContains(profile, 'Save profile')
 
     def test_profile_requires_login(self):
         response = self.client.get(reverse('accounts:profile'))

@@ -16,7 +16,7 @@ from django.views.decorators.http import require_POST
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django_ratelimit.decorators import ratelimit
 from PIL import Image
-from .forms import OTPForm, ProfileForm, RegistrationForm, SecureLoginForm
+from .forms import OTPForm, RegistrationForm, SecureLoginForm
 from .models import EmailOTP, User
 from django.contrib.auth.hashers import check_password, make_password
 
@@ -93,17 +93,12 @@ def send_otp(user):
 def logout_view(request): logout(request); return redirect('accounts:login')
 def home(request): return redirect('dashboard:home') if request.user.is_authenticated else redirect('accounts:login')
 
+@require_http_methods(['GET'])
 @login_required
-@ensure_csrf_cookie
 def profile(request):
-    form = ProfileForm(request.POST or None, instance=request.user)
-    if request.method == 'POST' and form.is_valid():
-        form.save()
-        messages.success(request, 'Your profile was updated.')
-        return redirect('accounts:profile')
     photo_data = ''
     if request.user.profile_photo:
         image_format = Image.open(BytesIO(request.user.profile_photo)).format.lower()
         mime_type = {'jpg': 'jpeg'}.get(image_format, image_format)
         photo_data = f'data:image/{mime_type};base64,' + base64.b64encode(request.user.profile_photo).decode()
-    return render(request, 'accounts/profile.html', {'form': form, 'profile_photo': photo_data})
+    return render(request, 'accounts/profile.html', {'profile_photo': photo_data})
