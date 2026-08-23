@@ -68,6 +68,7 @@ document.addEventListener('DOMContentLoaded', () => {
       countdown.textContent = `${String(Math.floor(seconds / 3600)).padStart(2, '0')}:${String(Math.floor((seconds % 3600) / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
       if (seconds <= 600) notify('Your campus token expires in 10 minutes.', '10m');
       if (seconds <= 300) notify('Your campus token expires in 5 minutes.', '5m');
+      if (seconds <= 120) notify('Your campus token is expiring in 2 minutes. If you want to stay on campus, regenerate the token.', '2m');
       if (seconds <= 60) notify('Your campus token expires in 1 minute.', '1m');
       if (data.status_url && Date.now() - lastStatusCheck >= 60000) {
         lastStatusCheck = Date.now();
@@ -105,10 +106,11 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('[data-token-action]').forEach((button) => button.addEventListener('click', async () => {
     button.disabled = true;
     stopCamera();
-    if ('Notification' in window && Notification.permission === 'default') await Notification.requestPermission();
     try {
       const response = await fetch(button.dataset.url, {method: 'POST', credentials: 'same-origin', headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken(), 'Accept': 'application/json'}, body: JSON.stringify({duration_minutes: Number(duration.value), capture_mode: 'webcam', captured_at: Date.now() / 1000, image: snapshot})});
-      const data = await response.json();
+      const responseText = await response.text();
+      let data;
+      try { data = JSON.parse(responseText); } catch (error) { data = {error: `Token request failed (${response.status}). Reload the page and try again.`}; }
       if (response.ok) {
         result.textContent = `Token ${data.token_id} created.`;
         qr.src = data.qr_data_url;
@@ -117,7 +119,7 @@ document.addEventListener('DOMContentLoaded', () => {
         pass.classList.remove('d-none');
         startCountdown(data);
       } else result.textContent = data.error || 'Token could not be created.';
-    } catch (error) { result.textContent = 'Token could not be created. Try again.'; }
+    } catch (error) { result.textContent = error.message || 'Token request failed. Check your connection and try again.'; }
     button.disabled = false;
   }));
 
@@ -132,6 +134,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     else if (response.status === 403) window.location.reload();
     else button.disabled = false;
+  }));
+  document.querySelectorAll('[data-cancel-token]').forEach((button) => button.addEventListener('click', async () => {
+    if (!window.confirm('Cancel this live token?')) return;
+    button.disabled = true;
+    const response = await fetch(button.dataset.url, {method: 'POST', credentials: 'same-origin', headers: {'X-CSRFToken': csrfToken(), 'Accept': 'application/json'}});
+    if (response.ok) window.location.reload();
+    else { button.disabled = false; window.alert((await response.json()).error || 'The token could not be cancelled.'); }
   }));
   const search = document.querySelector('[data-student-search]');
   const results = document.querySelector('[data-student-results]');

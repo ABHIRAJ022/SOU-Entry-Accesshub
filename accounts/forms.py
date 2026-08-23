@@ -87,8 +87,6 @@ class OTPForm(forms.Form):
         return value
 
 class ProfileForm(forms.ModelForm):
-    profile_photo = forms.ImageField(required=False, label='Profile photo')
-
     class Meta:
         model = User
         fields = ('full_name', 'phone_number')
@@ -97,15 +95,8 @@ class ProfileForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         for field in self.fields.values():
             field.widget.attrs['class'] = 'form-control'
-        self.fields['profile_photo'].widget.attrs['accept'] = 'image/jpeg,image/png,image/webp'
 
     def clean_full_name(self):
         value = sanitized(self.cleaned_data['full_name'])
         if not re.fullmatch(r"[A-Za-z][A-Za-z .'-]{1,119}", value): raise ValidationError('Enter a valid full name.')
         return value
-
-    def clean_profile_photo(self):
-        photo = self.cleaned_data.get('profile_photo')
-        if photo and photo.size > 2 * 1024 * 1024:
-            raise ValidationError('Profile photos must be 2 MB or smaller.')
-        return photo

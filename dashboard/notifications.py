@@ -19,8 +19,12 @@ def send_token_created(token):
 def send_token_expiry_notice(token, kind):
     if TokenNotification.objects.filter(token=token, kind=kind).exists():
         return
+    messages = {
+        '2m': 'Your campus token is expiring in 2 minutes. If you want to stay on campus, regenerate the token.',
+    }
     try:
-        send_mail('Smart Campus token expiry reminder', f'Your campus token {token.public_id} expires soon at {token.expires_at.isoformat()}.', settings.DEFAULT_FROM_EMAIL, [token.user.email], fail_silently=False)
+        message = messages.get(kind, f'Your campus token {token.public_id} expires soon at {token.expires_at.isoformat()}.')
+        send_mail('Your campus token expires in 2 minutes' if kind == '2m' else 'Smart Campus token expiry reminder', message, settings.DEFAULT_FROM_EMAIL, [token.user.email], fail_silently=False)
         TokenNotification.objects.get_or_create(token=token, kind=kind)
     except (OSError, SMTPException):
         logger.exception('Token expiry email failed for %s', token.public_id)

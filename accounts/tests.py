@@ -5,6 +5,7 @@ from django.urls import reverse
 from django.core.files.uploadedfile import SimpleUploadedFile
 from io import BytesIO
 from PIL import Image
+from .admin import AccountUserAdminForm
 from .models import Branch, EmailOTP, User
 
 @override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
@@ -176,22 +177,33 @@ class AuthenticationContractTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, self.user.email)
 
-        image = BytesIO()
-        Image.new('RGB', (40, 40), 'navy').save(image, format='PNG')
         response = self.client.post(reverse('accounts:profile'), {
             'full_name': 'Updated Student',
             'phone_number': '9876543210',
-            'profile_photo': SimpleUploadedFile('profile.png', image.getvalue(), content_type='image/png'),
         })
         self.assertRedirects(response, reverse('accounts:profile'))
         self.user.refresh_from_db()
         self.assertEqual(self.user.full_name, 'Updated Student')
         self.assertEqual(self.user.phone_number, '9876543210')
-        self.assertTrue(self.user.profile_photo.startswith(b'\x89PNG'))
+        self.assertFalse(self.user.profile_photo)
+        self.assertNotContains(self.client.get(reverse('accounts:profile')), 'Profile photo')
 
     def test_profile_requires_login(self):
         response = self.client.get(reverse('accounts:profile'))
         self.assertRedirects(response, f'{reverse("accounts:login")}?next={reverse("accounts:profile")}')
+
+    def test_admin_form_can_upload_profile_photo(self):
+        image = BytesIO()
+        Image.new('RGB', (40, 40), 'navy').save(image, format='PNG')
+        form = AccountUserAdminForm(
+            data={'email': self.user.email, 'password': self.user.password, 'date_joined': self.user.date_joined.strftime('%Y-%m-%d %H:%M:%S'), 'full_name': self.user.full_name, 'phone_number': '', 'role': User.Role.STUDENT, 'branch': self.branch.pk},
+            files={'profile_photo': SimpleUploadedFile('profile.png', image.getvalue(), content_type='image/png')},
+            instance=self.user,
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        form.save()
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.profile_photo.startswith(b'\x89PNG'))
 
 class HealthContractTests(TestCase):
     def test_health_endpoint_reports_operational_database(self):

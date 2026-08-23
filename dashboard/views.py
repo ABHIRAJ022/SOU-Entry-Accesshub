@@ -67,6 +67,36 @@ def admin_dashboard(request):
         'active_staff': User.objects.filter(role=User.Role.SECURITY, is_active=True, is_approved_by_super_admin=True).count(),
     })
 
+def _admin_students(request):
+    students = User.objects.filter(role=User.Role.STUDENT)
+    return students if request.user.is_superuser else students.filter(branch=request.user.branch)
+
+@require_GET
+@role_required(User.Role.ADMIN)
+def token_management(request):
+    now = timezone.now()
+    tokens = CampusToken.objects.filter(user__in=_admin_students(request)).select_related('user', 'user__branch').order_by('-created_at')
+    live_tokens = tokens.filter(revoked_at__isnull=True, used_at__isnull=True, expires_at__gt=now)
+    expired_tokens = tokens.exclude(pk__in=live_tokens.values('pk'))
+    return render(request, 'dashboard/tokens.html', {'live_tokens': live_tokens, 'expired_tokens': expired_tokens, 'live_count': live_tokens.count(), 'expired_count': expired_tokens.count(), 'now': now})
+
+@require_GET
+@role_required(User.Role.ADMIN)
+def token_history(request, user_id):
+    user = get_object_or_404(_admin_students(request), pk=user_id)
+    return render(request, 'dashboard/token_history.html', {'student': user, 'tokens': user.campus_tokens.order_by('-created_at'), 'now': timezone.now()})
+
+@require_POST
+@role_required(User.Role.ADMIN)
+def cancel_token(request, token_id):
+    with transaction.atomic():
+        token = get_object_or_404(CampusToken.objects.select_for_update(), public_id=token_id, user__in=_admin_students(request))
+        if token.revoked_at is None and token.expires_at > timezone.now() and token.used_at is None:
+            token.revoked_at = timezone.now()
+            token.save(update_fields=['revoked_at'])
+            return JsonResponse({'status': 'cancelled'})
+    return JsonResponse({'error': 'Only a live, unused token can be cancelled.'}, status=409)
+
 @role_required(User.Role.SECURITY)
 def security_dashboard(request): return render(request, 'dashboard/security.html')
 
@@ -141,8 +171,8 @@ def token_status(request, token_id):
         return JsonResponse({'error': 'Token not found.'}, status=404)
     token.mark_expired()
     remaining = (token.expires_at - timezone.now()).total_seconds()
-    for seconds, kind in ((600, '10m'), (300, '5m'), (60, '1m')):
-        if 0 < remaining <= seconds:
+    for lower_bound, upper_bound, kind in ((300, 600, '10m'), (120, 300, '5m'), (60, 120, '2m'), (0, 60, '1m')):
+        if lower_bound < remaining <= upper_bound:
             send_token_expiry_notice(token, kind)
             break
     return JsonResponse({'status': 'ACTIVE' if token.is_active else 'EXPIRED', 'expires_at': token.expires_at.isoformat(), 'server_now': timezone.now().isoformat()})

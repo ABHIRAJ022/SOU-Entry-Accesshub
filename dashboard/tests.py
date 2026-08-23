@@ -9,7 +9,7 @@ from datetime import timedelta
 from PIL import Image
 from accounts.models import Branch, User
 from biometrics.models import IdentityVerification
-from .models import CampusLocation, CampusToken
+from .models import CampusLocation, CampusToken, TokenNotification
 from .token_utils import signed_payload
 from .token_utils import signed_payload, verify_signed_payload
 
@@ -242,3 +242,51 @@ class StudentDashboardTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'application/pdf')
         self.assertTrue(response.content.startswith(b'%PDF'))
+
+    def test_token_status_sends_two_minute_expiry_notice_once(self):
+        branch = Branch.objects.create(name='Notice Branch', code='NOTICE')
+        student = User.objects.create_user(email='notice@example.com', password='StrongPassword123!', full_name='Notice Student', enrollment_number='NOTICE-001', branch=branch)
+        student.is_email_verified = True
+        student.is_approved_by_admin = True
+        student.save(update_fields=['is_email_verified', 'is_approved_by_admin'])
+        token, _ = CampusToken.issue(student, 30)
+        token.expires_at = timezone.now() + timedelta(seconds=90)
+        token.save(update_fields=['expires_at'])
+        self.client.force_login(student)
+        endpoint = reverse('dashboard:token_status', args=[token.public_id])
+        self.assertEqual(self.client.get(endpoint).status_code, 200)
+        self.assertEqual(TokenNotification.objects.filter(token=token, kind='2m').count(), 1)
+        self.client.get(endpoint)
+        self.assertEqual(TokenNotification.objects.filter(token=token, kind='2m').count(), 1)
+
+
+class AdminTokenManagementTests(TestCase):
+    def setUp(self):
+        self.branch = Branch.objects.create(name='Admin Token Branch', code='ADMIN-TOKEN')
+        self.admin = User.objects.create_user(email='token-admin@example.com', password='StrongPassword123!', full_name='Token Admin', role=User.Role.ADMIN, branch=self.branch)
+        self.student = User.objects.create_user(email='managed-student@example.com', password='StrongPassword123!', full_name='Managed Student', enrollment_number='MANAGED-001', branch=self.branch)
+        self.other_branch = Branch.objects.create(name='Other Token Branch', code='OTHER-TOKEN')
+        self.other_student = User.objects.create_user(email='other-managed@example.com', password='StrongPassword123!', full_name='Other Managed', enrollment_number='OTHER-001', branch=self.other_branch)
+        self.client.force_login(self.admin)
+
+    def test_management_page_lists_live_and_expired_tokens(self):
+        expired, _ = CampusToken.issue(self.student, 30)
+        expired.expires_at = timezone.now() - timedelta(minutes=1)
+        expired.save(update_fields=['expires_at'])
+        live, _ = CampusToken.issue(self.student, 30)
+        response = self.client.get(reverse('dashboard:token_management'))
+        self.assertContains(response, str(live.public_id))
+        self.assertContains(response, str(expired.public_id))
+
+    def test_branch_admin_cannot_access_other_student_history_or_cancel_token(self):
+        token, _ = CampusToken.issue(self.other_student, 30)
+        self.assertEqual(self.client.get(reverse('dashboard:token_history', args=[self.other_student.id])).status_code, 404)
+        self.assertEqual(self.client.post(reverse('dashboard:cancel_token', args=[token.public_id])).status_code, 404)
+
+    def test_admin_can_cancel_live_token_without_deleting_history(self):
+        token, _ = CampusToken.issue(self.student, 30)
+        response = self.client.post(reverse('dashboard:cancel_token', args=[token.public_id]))
+        self.assertEqual(response.status_code, 200)
+        token.refresh_from_db()
+        self.assertIsNotNone(token.revoked_at)
+        self.assertContains(self.client.get(reverse('dashboard:token_history', args=[self.student.id])), str(token.public_id))

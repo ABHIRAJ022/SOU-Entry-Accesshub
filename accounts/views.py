@@ -96,12 +96,9 @@ def home(request): return redirect('dashboard:home') if request.user.is_authenti
 @login_required
 @ensure_csrf_cookie
 def profile(request):
-    form = ProfileForm(request.POST or None, request.FILES or None, instance=request.user)
+    form = ProfileForm(request.POST or None, instance=request.user)
     if request.method == 'POST' and form.is_valid():
-        user = form.save(commit=False)
-        if form.cleaned_data.get('profile_photo'):
-            user.profile_photo = form.cleaned_data['profile_photo'].read()
-        user.save(update_fields=['full_name', 'phone_number', 'profile_photo'])
+        form.save()
         messages.success(request, 'Your profile was updated.')
         return redirect('accounts:profile')
     photo_data = ''
