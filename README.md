@@ -6,8 +6,7 @@ Django application for student campus tokens, webcam audit snapshots, signed QR 
 
 ```mermaid
 flowchart LR
-  Browser[Student / Admin / Guard browser] --> Hosting[Netlify public URL]
-  Hosting --> Vercel[Vercel Python WSGI]
+  Browser[Student / Admin / Guard browser] --> Vercel[Vercel Python WSGI]
   Vercel --> Django[Django application]
   Django --> DB[(PostgreSQL)]
   Django --> Cloudinary[Cloudinary media]
