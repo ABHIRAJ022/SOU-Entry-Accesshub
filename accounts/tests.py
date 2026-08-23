@@ -2,6 +2,9 @@ from django.conf import settings
 from django.core.cache import cache
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
+from django.core.files.uploadedfile import SimpleUploadedFile
+from io import BytesIO
+from PIL import Image
 from .models import Branch, EmailOTP, User
 
 @override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
@@ -166,6 +169,29 @@ class AuthenticationContractTests(TestCase):
         response = self.client.post(reverse('accounts:login'), {'role': User.Role.SECURITY, 'username': staff.email, 'password': 'StrongPassword123!'})
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Verify your email and await admin approval')
+
+    def test_authenticated_user_can_view_and_update_profile(self):
+        self.client.force_login(self.user)
+        response = self.client.get(reverse('accounts:profile'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.user.email)
+
+        image = BytesIO()
+        Image.new('RGB', (40, 40), 'navy').save(image, format='PNG')
+        response = self.client.post(reverse('accounts:profile'), {
+            'full_name': 'Updated Student',
+            'phone_number': '9876543210',
+            'profile_photo': SimpleUploadedFile('profile.png', image.getvalue(), content_type='image/png'),
+        })
+        self.assertRedirects(response, reverse('accounts:profile'))
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.full_name, 'Updated Student')
+        self.assertEqual(self.user.phone_number, '9876543210')
+        self.assertTrue(self.user.profile_photo.startswith(b'\x89PNG'))
+
+    def test_profile_requires_login(self):
+        response = self.client.get(reverse('accounts:profile'))
+        self.assertRedirects(response, f'{reverse("accounts:login")}?next={reverse("accounts:profile")}')
 
 class HealthContractTests(TestCase):
     def test_health_endpoint_reports_operational_database(self):

@@ -1,5 +1,7 @@
+import base64
 import logging
 import secrets
+from io import BytesIO
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import login, logout
@@ -13,7 +15,8 @@ from django.views.decorators.http import require_http_methods
 from django.views.decorators.http import require_POST
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django_ratelimit.decorators import ratelimit
-from .forms import OTPForm, RegistrationForm, SecureLoginForm
+from PIL import Image
+from .forms import OTPForm, ProfileForm, RegistrationForm, SecureLoginForm
 from .models import EmailOTP, User
 from django.contrib.auth.hashers import check_password, make_password
 
@@ -89,3 +92,21 @@ def send_otp(user):
 @require_POST
 def logout_view(request): logout(request); return redirect('accounts:login')
 def home(request): return redirect('dashboard:home') if request.user.is_authenticated else redirect('accounts:login')
+
+@login_required
+@ensure_csrf_cookie
+def profile(request):
+    form = ProfileForm(request.POST or None, request.FILES or None, instance=request.user)
+    if request.method == 'POST' and form.is_valid():
+        user = form.save(commit=False)
+        if form.cleaned_data.get('profile_photo'):
+            user.profile_photo = form.cleaned_data['profile_photo'].read()
+        user.save(update_fields=['full_name', 'phone_number', 'profile_photo'])
+        messages.success(request, 'Your profile was updated.')
+        return redirect('accounts:profile')
+    photo_data = ''
+    if request.user.profile_photo:
+        image_format = Image.open(BytesIO(request.user.profile_photo)).format.lower()
+        mime_type = {'jpg': 'jpeg'}.get(image_format, image_format)
+        photo_data = f'data:image/{mime_type};base64,' + base64.b64encode(request.user.profile_photo).decode()
+    return render(request, 'accounts/profile.html', {'form': form, 'profile_photo': photo_data})
