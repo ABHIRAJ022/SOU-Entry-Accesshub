@@ -13,7 +13,6 @@
 <form class="d-none">{% csrf_token %}</form>
 <div class="card card-body mt-3">
   <h2 class="h5">Campus token</h2>
-  {% if not identity_verified %}<div class="alert alert-info d-flex flex-wrap align-items-center justify-content-between gap-2" role="status"><span>Complete identity verification before requesting a token.</span><a class="btn btn-sm btn-primary rounded-pill" href="{% url 'biometrics:verify_page' %}">Verify identity</a></div>{% endif %}
   {% if latest_token %}
     {% if active_token %}<p class="text-warning">An active token already exists. You can create another token after it expires.</p>{% else %}<p class="text-secondary">Your latest token has expired. Take a live photo to create a new one.</p>{% endif %}
     <div class="d-flex flex-wrap gap-4 align-items-start mb-3">

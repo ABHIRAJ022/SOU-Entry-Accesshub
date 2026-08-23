@@ -46,19 +46,6 @@ class StudentDashboardTests(TestCase):
         self.assertContains(response, 'Approved')
         self.assertNotContains(response, 'Pending Admin Approval')
 
-    def test_approved_student_can_reach_identity_verification_before_token(self):
-        user = User.objects.create_user(
-            email='identity-link@example.com', password='StrongPassword123!',
-            full_name='Identity Link Student', enrollment_number='IDENTITY-001',
-        )
-        user.is_email_verified = True
-        user.is_approved_by_admin = True
-        user.save(update_fields=['is_email_verified', 'is_approved_by_admin'])
-        self.client.force_login(user)
-        response = self.client.get(reverse('dashboard:home'))
-        self.assertContains(response, reverse('biometrics:verify_page'))
-        self.assertContains(response, 'Verify identity')
-
     def test_pending_student_sees_pending_status(self):
         user = User.objects.create_user(
             email='pending-dashboard@example.com', password='StrongPassword123!',
@@ -114,12 +101,6 @@ class StudentDashboardTests(TestCase):
         student.is_approved_by_admin = True
         student.save(update_fields=['is_email_verified', 'is_approved_by_admin'])
         self.client.force_login(student)
-        verification = IdentityVerification.objects.create(user=student, audit_snapshot=b'audit', snapshot_size=5, verification_method='pin', expires_at=timezone.now() + timedelta(minutes=5))
-        session = self.client.session
-        session['identity_verified'] = True
-        session['identity_verification_id'] = verification.pk
-        session['identity_verified_at'] = timezone.now().timestamp()
-        session.save()
         endpoint = reverse('dashboard:issue_token')
         response = self.client.post(endpoint, self._token_payload(120), content_type='application/json', secure=True)
         self.assertEqual(response.status_code, 200)

@@ -16,7 +16,6 @@ from .models import CampusToken, TokenAudit
 from .token_utils import pdf_pass, qr_png, signed_payload, token_from_signed_payload
 from .models import CampusLocation
 from .notifications import send_account_approved, send_token_created, send_token_expiry_notice
-from biometrics.views import has_recent_identity_verification
 
 TOKEN_DURATIONS = {30, 60, 120, 180, 240, 300, 360, 420, 480}
 
@@ -42,7 +41,6 @@ def home(request):
     return render(request, 'dashboard/student.html', {
         'student': request.user,
         'email_verified': request.user.is_email_verified,
-        'identity_verified': has_recent_identity_verification(request),
         'approval_status': 'approved' if request.user.is_approved_by_admin else ('rejected' if not request.user.is_active else 'pending'),
         'active_token': active_token,
         'active_token_qr': 'data:image/png;base64,' + base64.b64encode(qr_png(active_token)).decode() if active_token else '',
@@ -120,8 +118,6 @@ def issue_token(request):
         snapshot = process_webcam_snapshot(payload)
     except SnapshotError as exc:
         return JsonResponse({'error': str(exc)}, status=400)
-    if not has_recent_identity_verification(request):
-        return JsonResponse({'error': 'Complete identity verification before requesting a token.'}, status=403)
     with transaction.atomic():
         try:
             token, raw_token = CampusToken.issue(request.user, duration)
