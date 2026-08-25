@@ -16,6 +16,7 @@ def signed_payload(token):
     payload = {
         'token_id': str(token.public_id),
         'user_id': token.user_id,
+        'guest_request_id': token.guest_request_id,
         'generation': token.generation,
         'expires_at': token.expires_at.isoformat(),
     }
@@ -43,7 +44,7 @@ def token_from_signed_payload(value):
     if not payload:
         return None
     from .models import CampusToken
-    return CampusToken.objects.filter(public_id=payload.get('token_id'), user_id=payload.get('user_id')).first()
+    return CampusToken.objects.filter(public_id=payload.get('token_id'), user_id=payload.get('user_id'), guest_request_id=payload.get('guest_request_id')).first()
 
 
 def qr_png(token):
@@ -65,11 +66,11 @@ def pdf_pass(token):
     document.setStrokeColorRGB(0.1, 0.25, 0.4)
     document.line(54, height - 98, width - 54, height - 98)
     document.setFont('Helvetica-Bold', 12)
-    document.drawString(54, height - 140, 'Student details')
+    document.drawString(54, height - 140, 'Visitor details' if token.guest_request_id else 'Student details')
     document.setStrokeColorRGB(0.4, 0.4, 0.4)
     document.rect(width - 174, height - 238, 120, 120)
     audit_snapshot = token.audit.snapshot if hasattr(token, 'audit') else None
-    photo = audit_snapshot or token.user.profile_photo
+    photo = audit_snapshot or (token.user.profile_photo if token.user_id else token.guest_request.live_photo)
     if photo:
         try:
             document.drawImage(ImageReader(BytesIO(photo)), width - 174, height - 238, width=120, height=120, preserveAspectRatio=True, anchor='c', mask='auto')
@@ -78,15 +79,15 @@ def pdf_pass(token):
             document.drawCentredString(width - 114, height - 178, 'PHOTO UNAVAILABLE')
     else:
         document.setFont('Helvetica-Bold', 24)
-        initials = ''.join(part[0] for part in token.user.full_name.split()[:2]).upper()
+        initials = ''.join(part[0] for part in token.holder_name.split()[:2]).upper()
         document.drawCentredString(width - 114, height - 178, initials or 'SC')
     document.setFont('Helvetica', 8)
-    document.drawCentredString(width - 114, height - 228, 'Student photo')
+    document.drawCentredString(width - 114, height - 228, 'Photo unavailable' if token.guest_request_id else 'Student photo')
     document.setFont('Helvetica', 11)
     details = [
-        ('Name', token.user.full_name),
-        ('Enrollment No.', token.user.enrollment_number or 'Not provided'),
-        ('Department / Branch', token.user.branch.name if token.user.branch else 'Not provided'),
+        ('Name', token.holder_name),
+        ('Email / Mobile', f'{token.holder_email or "Not provided"} / {token.guest_request.mobile if token.guest_request_id else token.user.phone_number}'),
+        ('Purpose', token.guest_request.purpose if token.guest_request_id else 'Student access'),
         ('Token ID', str(token.public_id)),
         ('Token expiry (IST)', timezone.localtime(token.expires_at).strftime('%Y-%m-%d %H:%M:%S %Z')),
     ]

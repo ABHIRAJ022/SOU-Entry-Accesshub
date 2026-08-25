@@ -3,16 +3,17 @@ import base64
 import json
 from decimal import Decimal, InvalidOperation
 from django.contrib.auth.decorators import login_required
+from django.contrib import messages
 from django.db import transaction
 from django.db.models import Q
 from django.http import HttpResponse, JsonResponse
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 from biometrics.snapshots import SnapshotError, process_webcam_snapshot
 from accounts.models import User
-from .models import CampusToken, TokenAudit
+from .models import CampusToken, GuestTokenRequest, TokenAudit
 from .token_utils import pdf_pass, qr_png, signed_payload, token_from_signed_payload
 from .models import CampusLocation
 from .notifications import send_account_approved, send_token_created, send_token_expiry_notice
@@ -75,7 +76,10 @@ def _admin_students(request):
 @role_required(User.Role.ADMIN)
 def token_management(request):
     now = timezone.now()
-    tokens = CampusToken.objects.filter(user__in=_admin_students(request)).select_related('user', 'user__branch').order_by('-created_at')
+    scope = Q(user__in=_admin_students(request))
+    if request.user.is_superuser:
+        scope |= Q(guest_request__isnull=False)
+    tokens = CampusToken.objects.filter(scope).select_related('user', 'user__branch', 'guest_request').order_by('-created_at')
     live_tokens = tokens.filter(revoked_at__isnull=True, used_at__isnull=True, expires_at__gt=now)
     expired_tokens = tokens.exclude(pk__in=live_tokens.values('pk'))
     return render(request, 'dashboard/tokens.html', {'live_tokens': live_tokens, 'expired_tokens': expired_tokens, 'live_count': live_tokens.count(), 'expired_count': expired_tokens.count(), 'now': now})
@@ -90,15 +94,83 @@ def token_history(request, user_id):
 @role_required(User.Role.ADMIN)
 def cancel_token(request, token_id):
     with transaction.atomic():
-        token = get_object_or_404(CampusToken.objects.select_for_update(), public_id=token_id, user__in=_admin_students(request))
+        scope = Q(user__in=_admin_students(request))
+        if request.user.is_superuser:
+            scope |= Q(guest_request__isnull=False)
+        token = get_object_or_404(CampusToken.objects.select_for_update().select_related('guest_request'), scope, public_id=token_id)
         if token.revoked_at is None and token.expires_at > timezone.now() and token.used_at is None:
             token.revoked_at = timezone.now()
             token.save(update_fields=['revoked_at'])
+            if token.guest_request_id:
+                token.guest_request.status = GuestTokenRequest.Status.CANCELLED
+                token.guest_request.approved_by = request.user
+                token.guest_request.approved_at = timezone.now()
+                token.guest_request.save(update_fields=['status', 'approved_by', 'approved_at', 'updated_at'])
             return JsonResponse({'status': 'cancelled'})
     return JsonResponse({'error': 'Only a live, unused token can be cancelled.'}, status=409)
 
 @role_required(User.Role.SECURITY)
-def security_dashboard(request): return render(request, 'dashboard/security.html')
+def security_dashboard(request):
+    return render(request, 'dashboard/security.html', {'guest_requests': GuestTokenRequest.objects.filter(status=GuestTokenRequest.Status.PENDING).order_by('-created_at')})
+
+
+def _guest_staff_required(view):
+    @wraps(view)
+    @login_required
+    def wrapped(request, *args, **kwargs):
+        if request.user.role != User.Role.SECURITY and not request.user.is_superuser:
+            return JsonResponse({'error': 'Forbidden'}, status=403)
+        return view(request, *args, **kwargs)
+    return wrapped
+
+
+@require_GET
+@_guest_staff_required
+def guest_requests(request):
+    requests = GuestTokenRequest.objects.select_related('approved_by').order_by('-created_at')
+    return render(request, 'dashboard/guest_requests.html', {'guest_requests': requests, 'pending_count': requests.filter(status=GuestTokenRequest.Status.PENDING).count()})
+
+
+@require_GET
+@_guest_staff_required
+def guest_request_detail(request, request_id):
+    guest = get_object_or_404(GuestTokenRequest.objects.select_related('approved_by', 'token'), pk=request_id)
+    photo = 'data:image/jpeg;base64,' + base64.b64encode(guest.live_photo).decode() if guest.live_photo else ''
+    return render(request, 'dashboard/guest_request_detail.html', {'guest_request': guest, 'guest_photo': photo})
+
+
+@require_POST
+@_guest_staff_required
+def approve_guest_request(request, request_id):
+    with transaction.atomic():
+        guest = get_object_or_404(GuestTokenRequest.objects.select_for_update(), pk=request_id)
+        if guest.status in {GuestTokenRequest.Status.REJECTED, GuestTokenRequest.Status.CANCELLED}:
+            return JsonResponse({'error': 'This guest request is no longer active.'}, status=409)
+        if guest.status == GuestTokenRequest.Status.APPROVED:
+            return JsonResponse({'status': 'already-approved'})
+        if guest.status == GuestTokenRequest.Status.MAIN_ADMIN_REQUIRED and not request.user.is_superuser:
+            return JsonResponse({'error': 'A main administrator must approve a replacement token.'}, status=403)
+        token, raw_token = CampusToken.issue_for_guest(guest)
+        guest.status = GuestTokenRequest.Status.APPROVED
+        guest.approved_by = request.user
+        guest.approved_at = timezone.now()
+        guest.save(update_fields=['status', 'approved_by', 'approved_at', 'updated_at'])
+    messages.success(request, f'Temporary token created for {guest.name}: {raw_token}')
+    send_token_created(token)
+    return redirect('dashboard:guest_request_detail', request_id=guest.pk)
+
+
+@require_POST
+@_guest_staff_required
+def reject_guest_request(request, request_id):
+    with transaction.atomic():
+        guest = get_object_or_404(GuestTokenRequest.objects.select_for_update(), pk=request_id)
+        if guest.status == GuestTokenRequest.Status.PENDING:
+            guest.status = GuestTokenRequest.Status.REJECTED
+            guest.approved_by = request.user
+            guest.approved_at = timezone.now()
+            guest.save(update_fields=['status', 'approved_by', 'approved_at', 'updated_at'])
+    return redirect('dashboard:guest_requests')
 
 @require_POST
 @role_required(User.Role.ADMIN)
@@ -273,10 +345,12 @@ def validate_token(request):
         token = token_from_signed_payload(payload.get('qr_payload', ''))
     except (json.JSONDecodeError, TypeError):
         token = None
-    if not token or not token.user.is_active or not token.user.can_login:
+    guest_approved = token and token.guest_request_id and token.guest_request.status == GuestTokenRequest.Status.APPROVED
+    student_approved = token and token.user_id and token.user.is_active and token.user.can_login
+    if not token or not (guest_approved or student_approved):
         return JsonResponse({'valid': False, 'error': 'Invalid token signature or student approval.'}, status=400)
     with transaction.atomic():
-        token = CampusToken.objects.select_for_update().select_related('user').filter(pk=token.pk).first()
+        token = CampusToken.objects.select_for_update().select_related('user', 'guest_request').filter(pk=token.pk).first()
         if not token or token.used_at or token.revoked_at or timezone.now() >= token.expires_at:
             if token:
                 token.mark_expired()
@@ -284,4 +358,4 @@ def validate_token(request):
         token.used_at = timezone.now()
         token.used_by = request.user
         token.save(update_fields=['used_at', 'used_by'])
-    return JsonResponse({'valid': True, 'student': token.user.full_name, 'enrollment_number': token.user.enrollment_number, 'expires_at': token.expires_at.isoformat()})
+    return JsonResponse({'valid': True, 'student': token.holder_name, 'email': token.holder_email, 'mobile': token.guest_request.mobile if token.guest_request_id else token.user.phone_number, 'purpose': token.guest_request.purpose if token.guest_request_id else '', 'expires_at': token.expires_at.isoformat()})

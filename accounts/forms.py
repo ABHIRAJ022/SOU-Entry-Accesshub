@@ -5,6 +5,7 @@ from django.contrib.auth import authenticate
 from django.contrib.auth.forms import AuthenticationForm
 from django.core.exceptions import ValidationError
 from .models import Branch, User
+from dashboard.models import GuestTokenRequest
 
 EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
 
@@ -75,6 +76,54 @@ class SecureLoginForm(AuthenticationForm):
             if self.user_cache.role != selected_role: raise ValidationError('The selected account type does not match this account.')
             if not self.user_cache.can_login: raise ValidationError('Verify your email and await admin approval before signing in.')
         return self.cleaned_data
+
+
+class GuestTokenRequestForm(forms.Form):
+    name = forms.CharField(max_length=120, label='Full name')
+    gender = forms.ChoiceField(choices=GuestTokenRequest.Gender.choices, label='Gender')
+    email = forms.EmailField(required=False, label='Email address (optional)')
+    mobile = forms.CharField(max_length=32, label='Mobile number')
+    purpose = forms.CharField(max_length=500, label='Purpose for entering campus', widget=forms.Textarea(attrs={'rows': 3}))
+    duration_minutes = forms.TypedChoiceField(
+        choices=((30, '30 minutes'), (60, '1 hour'), (120, '2 hours'), (180, '3 hours'), (240, '4 hours'), (300, '5 hours'), (360, '6 hours'), (420, '7 hours'), (480, '8 hours')),
+        coerce=int,
+        label='Token validity',
+    )
+    live_photo = forms.CharField(widget=forms.HiddenInput())
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            field.widget.attrs['class'] = 'form-control'
+        self.fields['duration_minutes'].widget.attrs['class'] = 'form-select'
+
+    def clean_name(self):
+        value = sanitized(self.cleaned_data['name'])
+        if not re.fullmatch(r"[A-Za-z][A-Za-z .'-]{1,119}", value):
+            raise ValidationError('Enter a valid full name.')
+        return value
+
+    def clean_email(self):
+        return sanitized(self.cleaned_data.get('email')).lower()
+
+    def clean_mobile(self):
+        value = sanitized(self.cleaned_data['mobile'])
+        digits = re.sub(r'\D', '', value)
+        if not 8 <= len(digits) <= 15:
+            raise ValidationError('Enter a valid mobile number.')
+        return digits
+
+    def clean_purpose(self):
+        value = sanitized(self.cleaned_data['purpose'])
+        if len(value) < 5:
+            raise ValidationError('Describe the purpose of your campus visit.')
+        return value
+
+    def clean_live_photo(self):
+        value = self.cleaned_data['live_photo']
+        if not value:
+            raise ValidationError('Take a live photo before submitting your request.')
+        return value
 
 class OTPForm(forms.Form):
     code = forms.CharField(min_length=6, max_length=6, strip=True)

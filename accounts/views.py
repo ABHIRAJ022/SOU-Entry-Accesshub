@@ -10,14 +10,17 @@ from django.core.mail import send_mail
 from smtplib import SMTPException
 from django.core.paginator import Paginator
 from django.db import transaction
+from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.http import require_POST
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django_ratelimit.decorators import ratelimit
 from PIL import Image
-from .forms import OTPForm, RegistrationForm, SecureLoginForm
+from .forms import GuestTokenRequestForm, OTPForm, RegistrationForm, SecureLoginForm
 from .models import EmailOTP, User
+from dashboard.models import GuestTokenRequest
+from biometrics.snapshots import SnapshotError, process_webcam_snapshot
 from django.contrib.auth.hashers import check_password, make_password
 
 logger = logging.getLogger(__name__)
@@ -30,6 +33,35 @@ def login_view(request):
     if request.method == 'POST' and form.is_valid():
         login(request, form.get_user()); return redirect('dashboard:home')
     return render(request, 'accounts/login.html', {'form': form})
+
+
+@ratelimit(key='ip', rate='5/m', method='POST', block=True)
+@ensure_csrf_cookie
+def guest_request(request):
+    form = GuestTokenRequestForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        try:
+            live_photo = process_webcam_snapshot({'capture_mode': 'webcam', 'image': form.cleaned_data['live_photo']})
+        except SnapshotError as exc:
+            form.add_error('live_photo', str(exc))
+        else:
+            data = form.cleaned_data.copy()
+            data['live_photo'] = live_photo
+            active_request = GuestTokenRequest.objects.filter(
+                mobile=data['mobile'],
+                status=GuestTokenRequest.Status.APPROVED,
+                token__revoked_at__isnull=True,
+                token__expires_at__gt=__import__('django.utils.timezone', fromlist=['now']).now(),
+            ).exists()
+            previous_request = GuestTokenRequest.objects.filter(mobile=data['mobile']).exists()
+            data['status'] = GuestTokenRequest.Status.MAIN_ADMIN_REQUIRED if previous_request else GuestTokenRequest.Status.PENDING
+            if active_request:
+                form.add_error('mobile', 'An active token already exists for this mobile number. Wait until it expires before requesting another.')
+            else:
+                GuestTokenRequest.objects.create(**data)
+                messages.success(request, 'Your temporary access request was submitted for security review.')
+                return redirect('accounts:login')
+    return render(request, 'accounts/guest_request.html', {'form': form})
 
 @ratelimit(key='ip', rate='5/m', method='POST', block=True)
 @transaction.atomic

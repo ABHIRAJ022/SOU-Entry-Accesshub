@@ -1,7 +1,8 @@
 import base64
 import time
 from io import BytesIO
-from django.test import TestCase
+from django.test import TestCase, override_settings
+from django.core import mail
 from django.core.cache import cache
 from django.urls import reverse
 from django.utils import timezone
@@ -9,9 +10,10 @@ from datetime import timedelta
 from PIL import Image
 from accounts.models import Branch, User
 from biometrics.models import IdentityVerification
-from .models import CampusLocation, CampusToken, TokenNotification
+from .models import CampusLocation, CampusToken, GuestTokenRequest, TokenNotification
 from .token_utils import signed_payload
 from .token_utils import signed_payload, verify_signed_payload
+from .notifications import send_token_created
 
 
 class StudentDashboardTests(TestCase):
@@ -108,6 +110,94 @@ class StudentDashboardTests(TestCase):
         self.assertEqual(response.json()['expires_at'][:16], (timezone.now() + timedelta(minutes=120)).isoformat()[:16])
         self.assertEqual(verify_signed_payload(response.json()['qr_payload'])['token_id'], response.json()['token_id'])
 
+    def test_guest_can_submit_temporary_token_request(self):
+        response = self.client.post(reverse('accounts:guest_request'), {
+            'name': 'Parent Visitor', 'gender': 'PREFER_NOT_TO_SAY', 'email': 'parent@example.com', 'mobile': '+91 9876543210',
+            'purpose': 'Attend the student orientation', 'duration_minutes': 120, 'live_photo': self._image(),
+        })
+        self.assertRedirects(response, reverse('accounts:login'))
+        guest = GuestTokenRequest.objects.get()
+        self.assertEqual(guest.status, GuestTokenRequest.Status.PENDING)
+        self.assertFalse(CampusToken.objects.exists())
+
+    def test_security_staff_can_approve_guest_request_once(self):
+        guest = GuestTokenRequest.objects.create(name='Guest Parent', gender='FEMALE', email='', mobile='9876543210', purpose='Visit student', duration_minutes=60, live_photo=b'guest-photo')
+        security = User.objects.create_user(email='guest-security@example.com', password='StrongPassword123!', full_name='Gate Security', role=User.Role.SECURITY)
+        self.client.force_login(security)
+        endpoint = reverse('dashboard:approve_guest_request', args=[guest.pk])
+        response = self.client.post(endpoint)
+        self.assertRedirects(response, reverse('dashboard:guest_request_detail', args=[guest.pk]))
+        guest.refresh_from_db()
+        self.assertEqual(guest.status, GuestTokenRequest.Status.APPROVED)
+        self.assertEqual(guest.approved_by, security)
+        self.assertEqual(CampusToken.objects.filter(guest_request=guest).count(), 1)
+        self.assertEqual(self.client.post(endpoint).status_code, 200)
+        self.assertEqual(CampusToken.objects.filter(guest_request=guest).count(), 1)
+
+    def test_guest_cannot_request_second_token_while_first_is_active(self):
+        guest = GuestTokenRequest.objects.create(name='Active Guest', gender='MALE', email='', mobile='9876543210', purpose='Visit student', duration_minutes=60, live_photo=b'guest-photo', status=GuestTokenRequest.Status.APPROVED)
+        CampusToken.issue_for_guest(guest)
+        response = self.client.post(reverse('accounts:guest_request'), {
+            'name': 'Active Guest', 'gender': 'MALE', 'mobile': '9876543210',
+            'purpose': 'Visit again', 'duration_minutes': 30, 'live_photo': self._image(),
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('An active token already exists', response.content.decode())
+
+    def test_guest_replacement_requires_main_admin_approval(self):
+        old_guest = GuestTokenRequest.objects.create(name='Returning Guest', gender='FEMALE', email='', mobile='9988776655', purpose='First visit', duration_minutes=30, live_photo=b'guest-photo', status=GuestTokenRequest.Status.APPROVED)
+        token, _ = CampusToken.issue_for_guest(old_guest)
+        token.expires_at = timezone.now() - timedelta(minutes=1)
+        token.save(update_fields=['expires_at'])
+        response = self.client.post(reverse('accounts:guest_request'), {
+            'name': 'Returning Guest', 'gender': 'FEMALE', 'mobile': '9988776655',
+            'purpose': 'Second visit', 'duration_minutes': 30, 'live_photo': self._image(),
+        })
+        self.assertRedirects(response, reverse('accounts:login'))
+        replacement = GuestTokenRequest.objects.exclude(pk=old_guest.pk).get()
+        self.assertEqual(replacement.status, GuestTokenRequest.Status.MAIN_ADMIN_REQUIRED)
+
+    def test_main_admin_can_cancel_live_guest_token(self):
+        guest = GuestTokenRequest.objects.create(name='Cancellable Guest', gender='MALE', email='', mobile='8877665544', purpose='Visit student', duration_minutes=60, live_photo=b'guest-photo', status=GuestTokenRequest.Status.APPROVED)
+        token, _ = CampusToken.issue_for_guest(guest)
+        admin = User.objects.create_superuser(email='main-admin-cancel@example.com', password='StrongPassword123!', full_name='Main Admin')
+        self.client.force_login(admin)
+        response = self.client.post(reverse('dashboard:cancel_token', args=[token.public_id]))
+        self.assertEqual(response.status_code, 200)
+        token.refresh_from_db()
+        self.assertIsNotNone(token.revoked_at)
+        guest.refresh_from_db()
+        self.assertEqual(guest.status, GuestTokenRequest.Status.CANCELLED)
+
+    def test_guest_detail_loads_cancel_handler_for_main_admin(self):
+        guest = GuestTokenRequest.objects.create(name='Detail Guest', gender='FEMALE', email='', mobile='7766554433', purpose='Visit student', duration_minutes=60, live_photo=b'guest-photo', status=GuestTokenRequest.Status.APPROVED)
+        token, _ = CampusToken.issue_for_guest(guest)
+        admin = User.objects.create_superuser(email='detail-admin@example.com', password='StrongPassword123!', full_name='Detail Admin')
+        self.client.force_login(admin)
+        response = self.client.get(reverse('dashboard:guest_request_detail', args=[guest.pk]))
+        self.assertContains(response, 'data-cancel-token')
+        self.assertContains(response, 'js/dashboard.js')
+        self.assertContains(response, 'csrfmiddlewaretoken')
+
+    @override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
+    def test_token_pdf_is_emailed_to_student(self):
+        student = User.objects.create_user(email='pdf-student@example.com', password='StrongPassword123!', full_name='PDF Student', enrollment_number='PDF-001')
+        token, _ = CampusToken.issue(student, 30)
+        send_token_created(token)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, [student.email])
+        self.assertEqual(mail.outbox[0].attachments[0][0], f'campus-pass-{token.public_id}.pdf')
+        self.assertEqual(mail.outbox[0].attachments[0][2], 'application/pdf')
+
+    @override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
+    def test_guest_token_pdf_is_emailed_when_email_is_provided(self):
+        guest = GuestTokenRequest.objects.create(name='Email Guest', gender='MALE', email='guest-pdf@example.com', mobile='9876543210', purpose='Visit student', duration_minutes=60, live_photo=b'guest-photo')
+        token, _ = CampusToken.issue_for_guest(guest)
+        send_token_created(token)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, [guest.email])
+        self.assertTrue(mail.outbox[0].attachments[0][0].endswith('.pdf'))
+
     def test_token_requires_live_photo(self):
         branch = Branch.objects.create(name='Gate Branch', code='GATE')
         student = User.objects.create_user(email='gate-student@example.com', password='StrongPassword123!', full_name='Gate Student', enrollment_number='GATE-001', branch=branch)
@@ -136,6 +226,25 @@ class StudentDashboardTests(TestCase):
         student.campus_tokens.update(expires_at=timezone.now() - timedelta(seconds=1))
         third = self.client.post(endpoint, self._token_payload(120), content_type='application/json', secure=True)
         self.assertEqual(third.status_code, 200)
+
+    def test_student_can_generate_at_most_three_tokens_per_day(self):
+        branch = Branch.objects.create(name='Daily Limit Branch', code='DAILY')
+        student = User.objects.create_user(email='daily-limit@example.com', password='StrongPassword123!', full_name='Daily Limit Student', enrollment_number='DAILY-001', branch=branch)
+        student.is_email_verified = True
+        student.is_approved_by_admin = True
+        student.save(update_fields=['is_email_verified', 'is_approved_by_admin'])
+        self.client.force_login(student)
+        self._set_identity_verification(student)
+        endpoint = reverse('dashboard:issue_token')
+
+        for _ in range(3):
+            response = self.client.post(endpoint, self._token_payload(), content_type='application/json', secure=True)
+            self.assertEqual(response.status_code, 200)
+            student.campus_tokens.update(expires_at=timezone.now() - timedelta(seconds=1))
+
+        response = self.client.post(endpoint, self._token_payload(), content_type='application/json', secure=True)
+        self.assertEqual(response.status_code, 409)
+        self.assertIn('maximum of 3 tokens per day', response.json()['error'])
 
     def test_one_hour_duration_is_supported(self):
         branch = Branch.objects.create(name='One Hour Branch', code='ONE-HOUR')

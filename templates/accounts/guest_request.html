@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+{% block title %}Temporary campus access | Smart Campus{% endblock %}
+{% load static %}
+{% block content %}
+<section class="auth-panel">
+  <div class="mb-4"><p class="eyebrow">Guest access</p><h1>Request a temporary token.</h1><p class="text-secondary lead fs-6">Visitors, parents, and guests can request campus access for review.</p></div>
+  <form method="post" class="auth-card">
+    {% csrf_token %}
+    {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+    {% for field in form %}{% if field.name != 'live_photo' %}<div class="mb-3"><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}</div>{% endif %}{% endfor %}
+    {{ form.live_photo }}
+    <div class="camera-stage mb-3"><video data-guest-camera autoplay muted playsinline></video><p data-guest-camera-status class="camera-status">Camera is off</p></div>
+    <div class="d-flex gap-2 mb-3"><button data-guest-camera-start class="btn btn-outline-secondary" type="button">Enable camera</button><button data-guest-camera-capture class="btn btn-outline-secondary" type="button" disabled>Take live photo</button></div>
+    <img data-guest-photo-preview class="d-none rounded border object-fit-cover mb-3" width="180" height="135" alt="Captured live photo">
+    {% for error in form.live_photo.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+    <button class="btn btn-primary btn-lg rounded-pill w-100" type="submit">Submit access request</button>
+  </form>
+  <p class="mt-4 text-center text-secondary"><a href="{% url 'accounts:login' %}">Back to sign in</a></p>
+</section>
+{% endblock %}
+{% block scripts %}<script src="{% static 'js/guest_request.js' %}"></script>{% endblock %}

@@ -1,9 +1,10 @@
 import logging
 from smtplib import SMTPException
 from django.conf import settings
-from django.core.mail import send_mail
+from django.core.mail import EmailMessage, send_mail
 from django.utils import timezone
 from .models import TokenNotification
+from .token_utils import pdf_pass
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +14,20 @@ def send_account_approved(user):
 
 
 def send_token_created(token):
-    _send('token-created', 'Your Smart Campus token was created', f'Your campus token {token.public_id} expires at {token.expires_at.isoformat()}.', token.user.email)
+    recipient = token.holder_email
+    if not recipient:
+        return
+    try:
+        message = EmailMessage(
+            'Your Smart Campus token was created',
+            f'Your campus token {token.public_id} expires at {token.expires_at.isoformat()}. The PDF pass is attached.',
+            settings.DEFAULT_FROM_EMAIL,
+            [recipient],
+        )
+        message.attach(f'campus-pass-{token.public_id}.pdf', pdf_pass(token), 'application/pdf')
+        message.send(fail_silently=False)
+    except (OSError, SMTPException):
+        logger.exception('Token PDF email failed for %s', token.public_id)
 
 
 def send_token_expiry_notice(token, kind):

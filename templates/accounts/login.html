@@ -19,5 +19,6 @@
 		<a class="btn btn-outline-secondary rounded-pill w-100" href="/accounts/google/login/"><span class="google-mark">G</span> Google</a>
 	</form>
 	<p class="mt-4 text-center text-secondary">New to campus? <a class="fw-bold" href="{% url 'accounts:register' %}">Create an account</a></p>
+	<p class="text-center text-secondary">Visiting campus? <a class="fw-bold" href="{% url 'accounts:guest_request' %}">Request a temporary token</a></p>
 </section>
 {% endblock %}
