@@ -127,7 +127,12 @@ def _guest_staff_required(view):
 @require_GET
 @_guest_staff_required
 def guest_requests(request):
-    requests = GuestTokenRequest.objects.select_related('approved_by').order_by('-created_at')
+    requests = GuestTokenRequest.objects.select_related('approved_by', 'token').order_by('-created_at')
+    for guest in requests:
+        if guest.status == GuestTokenRequest.Status.APPROVED and guest.token:
+            guest.token_qr = 'data:image/png;base64,' + base64.b64encode(qr_png(guest.token)).decode()
+        else:
+            guest.token_qr = ''
     return render(request, 'dashboard/guest_requests.html', {'guest_requests': requests, 'pending_count': requests.filter(status=GuestTokenRequest.Status.PENDING).count()})
 
 
@@ -136,7 +141,14 @@ def guest_requests(request):
 def guest_request_detail(request, request_id):
     guest = get_object_or_404(GuestTokenRequest.objects.select_related('approved_by', 'token'), pk=request_id)
     photo = 'data:image/jpeg;base64,' + base64.b64encode(guest.live_photo).decode() if guest.live_photo else ''
-    return render(request, 'dashboard/guest_request_detail.html', {'guest_request': guest, 'guest_photo': photo})
+    guest_token_qr = ''
+    if guest.token:
+        guest_token_qr = 'data:image/png;base64,' + base64.b64encode(qr_png(guest.token)).decode()
+    return render(request, 'dashboard/guest_request_detail.html', {
+        'guest_request': guest,
+        'guest_photo': photo,
+        'guest_token_qr': guest_token_qr,
+    })
 
 
 @require_POST

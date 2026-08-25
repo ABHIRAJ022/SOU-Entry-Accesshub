@@ -22,6 +22,66 @@ document.addEventListener('DOMContentLoaded', () => {
   const persistentToken = document.querySelector('[data-token-persistent]');
   const persistentCountdown = document.querySelector('[data-token-persistent-countdown]');
   const persistentStatus = document.querySelector('[data-token-persistent-status]');
+  const guestTokenCard = document.querySelector('[data-guest-token-card]');
+  const guestTokenStatus = document.querySelector('[data-guest-token-status]');
+  const guestTokenCountdown = document.querySelector('[data-guest-token-countdown]');
+  const guestTokenPdf = document.querySelector('[data-guest-token-pdf]');
+
+  const persistGuestToken = (payload) => {
+    try { localStorage.setItem('smartcampus_guest_token', JSON.stringify(payload)); } catch (error) {}
+  };
+
+  const restoreGuestToken = () => {
+    if (!guestTokenCard) return;
+    try {
+      const saved = JSON.parse(localStorage.getItem('smartcampus_guest_token') || 'null');
+      if (!saved || !saved.tokenId || !saved.expiresAt) return;
+      guestTokenCard.dataset.tokenId = saved.tokenId;
+      guestTokenCard.dataset.tokenExpires = saved.expiresAt;
+      guestTokenCard.dataset.tokenPdfUrl = saved.pdfUrl || guestTokenCard.dataset.tokenPdfUrl;
+      guestTokenCard.dataset.tokenQrUrl = saved.qrUrl || guestTokenCard.dataset.tokenQrUrl;
+      guestTokenCard.dataset.tokenStatusUrl = saved.statusUrl || guestTokenCard.dataset.tokenStatusUrl;
+      const qr = document.querySelector('[data-guest-token-qr]');
+      if (qr && saved.qrUrl) qr.src = saved.qrUrl;
+      if (guestTokenPdf && saved.pdfUrl) guestTokenPdf.href = saved.pdfUrl;
+    } catch (error) {}
+  };
+
+  const renderGuestTokenCountdown = async () => {
+    if (!guestTokenCard || !guestTokenCountdown || !guestTokenStatus) return;
+    const expiresAt = Date.parse(guestTokenCard.dataset.tokenExpires || '');
+    if (!expiresAt) return;
+    const remaining = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
+    guestTokenCountdown.textContent = `${String(Math.floor(remaining / 3600)).padStart(2, '0')}:${String(Math.floor((remaining % 3600) / 60)).padStart(2, '0')}:${String(remaining % 60).padStart(2, '0')}`;
+    if (!remaining) guestTokenStatus.textContent = 'EXPIRED';
+    else guestTokenStatus.textContent = 'ACTIVE';
+    persistGuestToken({
+      tokenId: guestTokenCard.dataset.tokenId,
+      expiresAt: guestTokenCard.dataset.tokenExpires,
+      pdfUrl: guestTokenCard.dataset.tokenPdfUrl,
+      qrUrl: guestTokenCard.dataset.tokenQrUrl,
+      statusUrl: guestTokenCard.dataset.tokenStatusUrl,
+      status: guestTokenStatus.textContent,
+    });
+    const statusUrl = guestTokenCard.dataset.tokenStatusUrl;
+    if (statusUrl && Date.now() - lastStatusCheck >= 60000) {
+      lastStatusCheck = Date.now();
+      try {
+        const response = await fetch(statusUrl, {credentials: 'same-origin', headers: {'Accept': 'application/json'}});
+        if (response.ok) {
+          const data = await response.json();
+          guestTokenStatus.textContent = data.status || guestTokenStatus.textContent;
+          if (data.expires_at) guestTokenCard.dataset.tokenExpires = data.expires_at;
+        }
+      } catch (error) {}
+    }
+  };
+
+  if (guestTokenCard) {
+    restoreGuestToken();
+    renderGuestTokenCountdown();
+    setInterval(renderGuestTokenCountdown, 1000);
+  }
 
   const stopCamera = () => {
     if (stream) stream.getTracks().forEach((track) => track.stop());

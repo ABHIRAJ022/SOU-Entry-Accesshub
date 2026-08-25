@@ -179,6 +179,27 @@ class StudentDashboardTests(TestCase):
         self.assertContains(response, 'js/dashboard.js')
         self.assertContains(response, 'csrfmiddlewaretoken')
 
+    def test_guest_detail_renders_live_token_card_with_qr_and_pdf_link(self):
+        guest = GuestTokenRequest.objects.create(name='Token Guest', gender='MALE', email='guest-token@example.com', mobile='9988776655', purpose='Visit student', duration_minutes=60, live_photo=b'guest-photo', status=GuestTokenRequest.Status.APPROVED)
+        token, _ = CampusToken.issue_for_guest(guest)
+        admin = User.objects.create_superuser(email='guest-token-admin@example.com', password='StrongPassword123!', full_name='Guest Token Admin')
+        self.client.force_login(admin)
+        response = self.client.get(reverse('dashboard:guest_request_detail', args=[guest.pk]))
+        self.assertContains(response, 'data-guest-token-card')
+        self.assertContains(response, 'Download PDF pass')
+        self.assertContains(response, 'Time remaining')
+        self.assertContains(response, str(token.public_id))
+
+    def test_guest_queue_renders_live_token_card_with_pdf_download(self):
+        guest = GuestTokenRequest.objects.create(name='Queue Guest', gender='FEMALE', email='queue-guest@example.com', mobile='7788990011', purpose='Visitor campus tour', duration_minutes=60, live_photo=b'guest-photo', status=GuestTokenRequest.Status.APPROVED)
+        token, _ = CampusToken.issue_for_guest(guest)
+        admin = User.objects.create_superuser(email='queue-guest-admin@example.com', password='StrongPassword123!', full_name='Queue Guest Admin')
+        self.client.force_login(admin)
+        response = self.client.get(reverse('dashboard:guest_requests'))
+        self.assertContains(response, 'Download PDF pass')
+        self.assertContains(response, str(token.public_id))
+        self.assertContains(response, 'Guest token QR code')
+
     @override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
     def test_token_pdf_is_emailed_to_student(self):
         student = User.objects.create_user(email='pdf-student@example.com', password='StrongPassword123!', full_name='PDF Student', enrollment_number='PDF-001')
