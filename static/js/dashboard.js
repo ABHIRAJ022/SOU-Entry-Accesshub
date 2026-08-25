@@ -26,6 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const guestTokenStatus = document.querySelector('[data-guest-token-status]');
   const guestTokenCountdown = document.querySelector('[data-guest-token-countdown]');
   const guestTokenPdf = document.querySelector('[data-guest-token-pdf]');
+  const guestQueueTokens = document.querySelectorAll('[data-guest-queue-token]');
 
   const persistGuestToken = (payload) => {
     try { localStorage.setItem('smartcampus_guest_token', JSON.stringify(payload)); } catch (error) {}
@@ -82,6 +83,25 @@ document.addEventListener('DOMContentLoaded', () => {
     renderGuestTokenCountdown();
     setInterval(renderGuestTokenCountdown, 1000);
   }
+
+  guestQueueTokens.forEach((card) => {
+    const statusEl = card.querySelector('[data-guest-queue-status]');
+    const countdownEl = card.querySelector('[data-guest-queue-countdown]');
+    const updateQueueCard = async () => {
+      if (!statusEl || !countdownEl) return;
+      const expiresAt = Date.parse(card.dataset.tokenExpires || '');
+      if (!expiresAt) return;
+      const remaining = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
+      countdownEl.textContent = `${String(Math.floor(remaining / 3600)).padStart(2, '0')}:${String(Math.floor((remaining % 3600) / 60)).padStart(2, '0')}:${String(remaining % 60).padStart(2, '0')}`;
+      statusEl.textContent = remaining ? 'ACTIVE' : 'EXPIRED';
+      if (card.dataset.tokenStatusUrl && !remaining && Date.now() - lastStatusCheck >= 60000) {
+        lastStatusCheck = Date.now();
+        try { const response = await fetch(card.dataset.tokenStatusUrl, {credentials: 'same-origin', headers: {'Accept': 'application/json'}}); if (response.ok) { const data = await response.json(); if (data.status) statusEl.textContent = data.status; }} catch (error) {}
+      }
+    };
+    updateQueueCard();
+    setInterval(updateQueueCard, 1000);
+  });
 
   const stopCamera = () => {
     if (stream) stream.getTracks().forEach((track) => track.stop());
