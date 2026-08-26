@@ -200,6 +200,26 @@ class StudentDashboardTests(TestCase):
         self.assertContains(response, str(token.public_id))
         self.assertContains(response, 'Guest token QR code')
 
+    def test_guest_queue_skips_approved_request_without_token(self):
+        GuestTokenRequest.objects.create(name='Missing Token Guest', gender='MALE', email='', mobile='7788990011', purpose='Visitor campus tour', duration_minutes=60, live_photo=b'guest-photo', status=GuestTokenRequest.Status.APPROVED)
+        admin = User.objects.create_superuser(email='missing-token-admin@example.com', password='StrongPassword123!', full_name='Missing Token Admin')
+        self.client.force_login(admin)
+        response = self.client.get(reverse('dashboard:guest_requests'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Missing Token Guest')
+
+    def test_security_can_check_and_download_guest_token(self):
+        guest = GuestTokenRequest.objects.create(name='Guest Token Viewer', gender='FEMALE', email='', mobile='7788990011', purpose='Visitor campus tour', duration_minutes=60, live_photo=b'guest-photo', status=GuestTokenRequest.Status.APPROVED)
+        token, _ = CampusToken.issue_for_guest(guest)
+        security = User.objects.create_user(email='guest-token-security@example.com', password='StrongPassword123!', full_name='Guest Token Security', role=User.Role.SECURITY)
+        self.client.force_login(security)
+        status_response = self.client.get(reverse('dashboard:token_status', args=[token.public_id]))
+        pdf_response = self.client.get(reverse('dashboard:token_pdf', args=[token.public_id]))
+        self.assertEqual(status_response.status_code, 200)
+        self.assertEqual(status_response.json()['status'], 'ACTIVE')
+        self.assertEqual(pdf_response.status_code, 200)
+        self.assertEqual(pdf_response['Content-Type'], 'application/pdf')
+
     @override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
     def test_token_pdf_is_emailed_to_student(self):
         student = User.objects.create_user(email='pdf-student@example.com', password='StrongPassword123!', full_name='PDF Student', enrollment_number='PDF-001')

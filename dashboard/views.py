@@ -5,7 +5,7 @@ from decimal import Decimal, InvalidOperation
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Prefetch, Q
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -124,13 +124,25 @@ def _guest_staff_required(view):
     return wrapped
 
 
+def _token_viewer_required(view):
+    @wraps(view)
+    @login_required
+    def wrapped(request, *args, **kwargs):
+        if request.user.role not in (User.Role.STUDENT, User.Role.SECURITY) and not request.user.is_superuser:
+            return JsonResponse({'error': 'Forbidden'}, status=403)
+        return view(request, *args, **kwargs)
+    return wrapped
+
+
 @require_GET
 @_guest_staff_required
 def guest_requests(request):
-    requests = GuestTokenRequest.objects.select_related('approved_by', 'token').order_by('-created_at')
+    requests = GuestTokenRequest.objects.select_related('approved_by').prefetch_related(
+        Prefetch('token', to_attr='guest_token')
+    ).order_by('-created_at')
     for guest in requests:
-        if guest.status == GuestTokenRequest.Status.APPROVED and guest.token:
-            guest.token_qr = 'data:image/png;base64,' + base64.b64encode(qr_png(guest.token)).decode()
+        if guest.status == GuestTokenRequest.Status.APPROVED and guest.guest_token:
+            guest.token_qr = 'data:image/png;base64,' + base64.b64encode(qr_png(guest.guest_token)).decode()
         else:
             guest.token_qr = ''
     return render(request, 'dashboard/guest_requests.html', {'guest_requests': requests, 'pending_count': requests.filter(status=GuestTokenRequest.Status.PENDING).count()})
@@ -139,11 +151,16 @@ def guest_requests(request):
 @require_GET
 @_guest_staff_required
 def guest_request_detail(request, request_id):
-    guest = get_object_or_404(GuestTokenRequest.objects.select_related('approved_by', 'token'), pk=request_id)
+    guest = get_object_or_404(
+        GuestTokenRequest.objects.select_related('approved_by').prefetch_related(
+            Prefetch('token', to_attr='guest_token')
+        ),
+        pk=request_id,
+    )
     photo = 'data:image/jpeg;base64,' + base64.b64encode(guest.live_photo).decode() if guest.live_photo else ''
     guest_token_qr = ''
-    if guest.token:
-        guest_token_qr = 'data:image/png;base64,' + base64.b64encode(qr_png(guest.token)).decode()
+    if guest.guest_token:
+        guest_token_qr = 'data:image/png;base64,' + base64.b64encode(qr_png(guest.guest_token)).decode()
     return render(request, 'dashboard/guest_request_detail.html', {
         'guest_request': guest,
         'guest_photo': photo,
@@ -248,9 +265,14 @@ def regenerate_token(request):
 
 
 @require_GET
-@role_required(User.Role.STUDENT)
+@_token_viewer_required
 def token_status(request, token_id):
-    token = CampusToken.objects.filter(public_id=token_id, user=request.user).first()
+    tokens = CampusToken.objects.filter(public_id=token_id)
+    if request.user.role == User.Role.STUDENT:
+        tokens = tokens.filter(user=request.user)
+    else:
+        tokens = tokens.filter(guest_request__isnull=False)
+    token = tokens.first()
     if not token:
         return JsonResponse({'error': 'Token not found.'}, status=404)
     token.mark_expired()
@@ -263,9 +285,14 @@ def token_status(request, token_id):
 
 
 @require_GET
-@role_required(User.Role.STUDENT)
+@_token_viewer_required
 def token_pdf(request, token_id):
-    token = CampusToken.objects.filter(public_id=token_id, user=request.user).select_related('user__branch', 'audit').first()
+    tokens = CampusToken.objects.filter(public_id=token_id)
+    if request.user.role == User.Role.STUDENT:
+        tokens = tokens.filter(user=request.user)
+    else:
+        tokens = tokens.filter(guest_request__isnull=False)
+    token = tokens.select_related('user__branch', 'guest_request', 'audit').first()
     if not token:
         return JsonResponse({'error': 'Token not found.'}, status=404)
     token.mark_expired()
