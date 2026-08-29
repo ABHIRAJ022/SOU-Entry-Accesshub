@@ -46,9 +46,10 @@
 		{% for message in messages %}<div class="alert alert-{{ message.tags|default:'info' }} shadow-sm" role="alert">{{ message }}</div>{% endfor %}
 		{% block content %}{% endblock %}
 	</main>
-	<footer class="container footer-note">Smart Campus <span>·</span> secure access for every arrival</footer>
+	<footer class="container footer-note">Your Campus Token <span>·</span> secure access for every arrival</footer>
 	<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
 	<script src="{% static 'js/theme.js' %}"></script>
+	<script src="{% static 'js/timezone.js' %}"></script>
 	<script src="{% static 'js/health_check.js' %}"></script>
 	<script src="{% static 'js/csrf_refresh.js' %}"></script>
 	{% block scripts %}{% endblock %}

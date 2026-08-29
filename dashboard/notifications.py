@@ -9,8 +9,12 @@ from .token_utils import pdf_pass
 logger = logging.getLogger(__name__)
 
 
+def _ist(value):
+    return timezone.localtime(value).strftime('%d %b %Y, %I:%M %p IST')
+
+
 def send_account_approved(user):
-    _send('account-approved', 'Your Smart Campus account was approved', f'Hello {user.full_name}, your Smart Campus account is now approved.', user.email)
+    _send('account-approved', 'Your Campus Token account is approved', f'Hello {user.full_name},\n\nYour Campus Token account has been approved by the campus administrator. You can now sign in with your registered email address and use the features available for your account role.\n\nIf you are a student, complete identity verification before generating a campus entry token. If you are security staff, open the gate scanner to validate signed QR passes.\n\nIf you did not expect this approval, contact your campus administrator.', user.email)
 
 
 def send_token_created(token):
@@ -19,8 +23,8 @@ def send_token_created(token):
         return
     try:
         message = EmailMessage(
-            'Your Smart Campus token was created',
-            f'Your campus token {token.public_id} expires at {token.expires_at.isoformat()}. The PDF pass is attached.',
+            'Your Campus Token pass is ready',
+            f'Hello {token.holder_name},\n\nYour Campus Token entry pass has been created successfully.\n\nToken ID: {token.public_id}\nValid until: {_ist(token.expires_at)}\nValidity: {token.duration_minutes} minutes\n\nThe signed PDF pass is attached to this email. Present the QR code at the campus entry checkpoint before it expires. The pass is linked to your verified profile and must not be shared with another person.\n\nIf any profile information is incorrect, contact campus administration before using the pass.',
             settings.DEFAULT_FROM_EMAIL,
             [recipient],
         )
@@ -34,11 +38,11 @@ def send_token_expiry_notice(token, kind):
     if TokenNotification.objects.filter(token=token, kind=kind).exists():
         return
     messages = {
-        '2m': 'Your campus token is expiring in 2 minutes. If you want to stay on campus, regenerate the token.',
+            '2m': f'Your Campus Token pass {token.public_id} expires in about 2 minutes at {_ist(token.expires_at)}. If you need continued access, return to your dashboard and generate a new pass after this one expires.',
     }
     try:
-        message = messages.get(kind, f'Your campus token {token.public_id} expires soon at {token.expires_at.isoformat()}.')
-        send_mail('Your campus token expires in 2 minutes' if kind == '2m' else 'Smart Campus token expiry reminder', message, settings.DEFAULT_FROM_EMAIL, [token.user.email], fail_silently=False)
+        message = messages.get(kind, f'Your Campus Token pass {token.public_id} expires soon at {_ist(token.expires_at)}.')
+        send_mail('Your Campus Token pass expires soon', message, settings.DEFAULT_FROM_EMAIL, [token.user.email], fail_silently=False)
         TokenNotification.objects.get_or_create(token=token, kind=kind)
     except (OSError, SMTPException):
         logger.exception('Token expiry email failed for %s', token.public_id)

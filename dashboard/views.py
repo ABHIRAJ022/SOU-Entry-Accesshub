@@ -389,7 +389,7 @@ def validate_token(request):
     if not token or not (guest_approved or student_approved):
         return JsonResponse({'valid': False, 'error': 'Invalid token signature or student approval.'}, status=400)
     with transaction.atomic():
-        token = CampusToken.objects.select_for_update().select_related('user', 'guest_request').filter(pk=token.pk).first()
+        token = CampusToken.objects.select_for_update().select_related('user__branch', 'guest_request').filter(pk=token.pk).first()
         if not token or token.used_at or token.revoked_at or timezone.now() >= token.expires_at:
             if token:
                 token.mark_expired()
@@ -397,4 +397,25 @@ def validate_token(request):
         token.used_at = timezone.now()
         token.used_by = request.user
         token.save(update_fields=['used_at', 'used_by'])
-    return JsonResponse({'valid': True, 'student': token.holder_name, 'email': token.holder_email, 'mobile': token.guest_request.mobile if token.guest_request_id else token.user.phone_number, 'purpose': token.guest_request.purpose if token.guest_request_id else '', 'expires_at': token.expires_at.isoformat()})
+    is_guest = bool(token.guest_request_id)
+    holder = token.guest_request if is_guest else token.user
+    profile_photo = holder.live_photo if is_guest else holder.profile_photo
+    return JsonResponse({
+        'valid': True,
+        'token_id': str(token.public_id),
+        'holder_type': 'Guest' if is_guest else 'Student',
+        'student': token.holder_name,
+        'full_name': token.holder_name,
+        'email': token.holder_email,
+        'mobile': holder.mobile if is_guest else holder.phone_number,
+        'phone_number': holder.mobile if is_guest else holder.phone_number,
+        'enrollment_number': '' if is_guest else holder.enrollment_number,
+        'gender': holder.get_gender_display() if is_guest else '',
+        'branch': '' if is_guest or not holder.branch_id else holder.branch.name,
+        'purpose': token.guest_request.purpose if is_guest else 'Student access',
+        'duration_minutes': token.duration_minutes,
+        'created_at': token.created_at.isoformat(),
+        'expires_at': token.expires_at.isoformat(),
+        'profile_photo': 'data:image/jpeg;base64,' + base64.b64encode(profile_photo).decode() if profile_photo else '',
+        'pdf_url': reverse('dashboard:token_pdf', args=[token.public_id]),
+    })

@@ -12,7 +12,7 @@
       <div><strong>Token:</strong> {{ guest.guest_token.public_id }}</div>
       <div><strong>Expires:</strong> {{ guest.guest_token.expires_at|date:'M j, Y, g:i A' }}</div>
       <div><strong>Status:</strong> <span data-guest-queue-status>{% if guest.guest_token.is_active %}ACTIVE{% else %}EXPIRED{% endif %}</span></div>
-      <div><strong>Time remaining:</strong> <span data-guest-queue-countdown>--:--:--</span> <small class="text-secondary ms-2" data-guest-queue-countdown-text>{% if guest.guest_token and guest.guest_token.is_active %}{{ guest.guest_token.expires_at|timeuntil }}{% else %}Expired{% endif %}</small></div>
+      <div><strong>Time remaining:</strong> <span data-guest-queue-countdown></span> <small class="text-secondary ms-2" data-guest-queue-countdown-text>{% if guest.guest_token and guest.guest_token.is_active %}{{ guest.guest_token.expires_at|timeuntil }}{% else %}Expired{% endif %}</small></div>
     </div>
   </div>
   <div class="mt-2">

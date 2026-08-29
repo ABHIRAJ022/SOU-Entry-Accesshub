@@ -58,11 +58,11 @@ def pdf_pass(token):
     output = BytesIO()
     document = canvas.Canvas(output, pagesize=A4)
     width, height = A4
-    document.setTitle(f'Smart Campus Pass {token.public_id}')
+    document.setTitle(f'Your Campus Token Pass {token.public_id}')
     document.setFont('Helvetica-Bold', 20)
-    document.drawString(54, height - 64, 'SMART CAMPUS')
+    document.drawString(54, height - 64, 'YOUR CAMPUS TOKEN')
     document.setFont('Helvetica', 10)
-    document.drawString(54, height - 82, 'Temporary campus entry pass')
+    document.drawString(54, height - 82, 'Temporary campus entry pass | All times IST')
     document.setStrokeColorRGB(0.1, 0.25, 0.4)
     document.line(54, height - 98, width - 54, height - 98)
     document.setFont('Helvetica-Bold', 12)
@@ -82,11 +82,16 @@ def pdf_pass(token):
         initials = ''.join(part[0] for part in token.holder_name.split()[:2]).upper()
         document.drawCentredString(width - 114, height - 178, initials or 'SC')
     document.setFont('Helvetica', 8)
-    document.drawCentredString(width - 114, height - 228, 'Photo unavailable' if token.guest_request_id else 'Student photo')
+    document.drawCentredString(width - 114, height - 228, 'Guest photo' if token.guest_request_id else 'Student profile photo')
     document.setFont('Helvetica', 11)
+    guest = token.guest_request if token.guest_request_id else None
+    student = token.user if token.user_id else None
     details = [
         ('Name', token.holder_name),
         ('Email / Mobile', f'{token.holder_email or "Not provided"} / {token.guest_request.mobile if token.guest_request_id else token.user.phone_number}'),
+        ('Enrollment number', student.enrollment_number if student and student.enrollment_number else 'Not provided'),
+        ('Branch', student.branch.name if student and student.branch_id else 'Not provided'),
+        ('Gender', guest.get_gender_display() if guest else 'Not provided'),
         ('Purpose', token.guest_request.purpose if token.guest_request_id else 'Student access'),
         ('Token ID', str(token.public_id)),
         ('Token expiry (IST)', timezone.localtime(token.expires_at).strftime('%Y-%m-%d %H:%M:%S %Z')),

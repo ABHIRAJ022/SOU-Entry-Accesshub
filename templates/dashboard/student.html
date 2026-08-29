@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% load static tz %}
-{% block title %}Student dashboard | Smart Campus{% endblock %}
+{% block title %}Student dashboard | Your Campus Token{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-start mb-4">
   <div><p class="eyebrow">Student access</p><h1 class="mb-2">Welcome, {{ student.full_name }}.</h1><p class="text-secondary mb-0">Your campus access status is always up to date here.</p></div>
@@ -24,7 +24,7 @@
         <a class="btn btn-sm btn-outline-secondary rounded-pill mt-2" href="{% url 'dashboard:token_pdf' latest_token.public_id %}">Download PDF pass</a>
       </div>
     </div>
-    <div data-token-persistent data-token-expires="{{ latest_token.expires_at|date:'c' }}" data-token-status-url="{% url 'dashboard:token_status' latest_token.public_id %}"></div>
+    <div data-token-persistent data-token-expires="{{ latest_token.expires_at|date:'c' }}" data-token-expires-ms="{{ latest_token.expires_at|date:'U' }}" data-token-status-url="{% url 'dashboard:token_status' latest_token.public_id %}"></div>
   {% else %}
     <p class="text-secondary">Take a clear live webcam photo, then create a signed entry pass with a 30-minute to 8-hour validity period. You can generate only 3 tokens daily. For create extra token contect the admin.</p>
   {% endif %}

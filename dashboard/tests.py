@@ -65,6 +65,13 @@ class StudentDashboardTests(TestCase):
         self.client.force_login(security)
         self.assertContains(self.client.get(reverse('dashboard:home')), 'Campus verification')
 
+    def test_security_dashboard_has_direct_route(self):
+        security = User.objects.create_user(email='security-direct-route@example.com', password='StrongPassword123!', full_name='Security', role=User.Role.SECURITY)
+        self.client.force_login(security)
+        response = self.client.get(reverse('dashboard:security'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-open-scanner')
+
     def test_branch_admin_can_only_approve_own_branch_students(self):
         first = Branch.objects.create(name='North Branch', code='NORTH')
         second = Branch.objects.create(name='South Branch', code='SOUTH')
@@ -200,6 +207,28 @@ class StudentDashboardTests(TestCase):
         self.assertContains(response, str(token.public_id))
         self.assertContains(response, 'Guest token QR code')
 
+    def test_guest_token_pages_expose_expiry_epoch_for_countdown_js(self):
+        guest = GuestTokenRequest.objects.create(name='Countdown Guest', gender='MALE', email='countdown-guest@example.com', mobile='7788990012', purpose='Campus tour', duration_minutes=60, live_photo=b'guest-photo', status=GuestTokenRequest.Status.APPROVED)
+        token, _ = CampusToken.issue_for_guest(guest)
+        admin = User.objects.create_superuser(email='countdown-admin@example.com', password='StrongPassword123!', full_name='Countdown Admin')
+        self.client.force_login(admin)
+        detail = self.client.get(reverse('dashboard:guest_request_detail', args=[guest.pk]))
+        queue = self.client.get(reverse('dashboard:guest_requests'))
+        self.assertContains(detail, 'data-token-expires-epoch="')
+        self.assertContains(queue, 'data-token-expires-epoch="')
+        self.assertContains(detail, str(int(token.expires_at.timestamp())))
+
+    def test_guest_token_pages_do_not_render_placeholder_countdown_text(self):
+        guest = GuestTokenRequest.objects.create(name='Placeholder Guest', gender='FEMALE', email='placeholder-guest@example.com', mobile='7788990013', purpose='Campus tour', duration_minutes=60, live_photo=b'guest-photo', status=GuestTokenRequest.Status.APPROVED)
+        token, _ = CampusToken.issue_for_guest(guest)
+        admin = User.objects.create_superuser(email='placeholder-admin@example.com', password='StrongPassword123!', full_name='Placeholder Admin')
+        self.client.force_login(admin)
+        detail = self.client.get(reverse('dashboard:guest_request_detail', args=[guest.pk]))
+        queue = self.client.get(reverse('dashboard:guest_requests'))
+        self.assertNotContains(detail, '--:--:--')
+        self.assertNotContains(queue, '--:--:--')
+        self.assertContains(detail, str(token.public_id))
+
     def test_guest_queue_skips_approved_request_without_token(self):
         GuestTokenRequest.objects.create(name='Missing Token Guest', gender='MALE', email='', mobile='7788990011', purpose='Visitor campus tour', duration_minutes=60, live_photo=b'guest-photo', status=GuestTokenRequest.Status.APPROVED)
         admin = User.objects.create_superuser(email='missing-token-admin@example.com', password='StrongPassword123!', full_name='Missing Token Admin')
@@ -219,6 +248,24 @@ class StudentDashboardTests(TestCase):
         self.assertEqual(status_response.json()['status'], 'ACTIVE')
         self.assertEqual(pdf_response.status_code, 200)
         self.assertEqual(pdf_response['Content-Type'], 'application/pdf')
+
+    def test_security_scan_returns_complete_student_profile(self):
+        branch = Branch.objects.create(name='Science Branch', code='SCI')
+        student = User.objects.create_user(email='scan-student@example.com', password='StrongPassword123!', full_name='Scan Student', enrollment_number='SCAN-001', phone_number='9876543210', branch=branch, profile_photo=b'admin-uploaded-photo')
+        student.is_email_verified = True
+        student.is_approved_by_admin = True
+        student.save(update_fields=['is_email_verified', 'is_approved_by_admin'])
+        token, _ = CampusToken.issue(student, 60)
+        security = User.objects.create_user(email='scan-security@example.com', password='StrongPassword123!', full_name='Scan Security', role=User.Role.SECURITY)
+        self.client.force_login(security)
+        response = self.client.post(reverse('validate_token'), {'qr_payload': signed_payload(token)}, content_type='application/json')
+        data = response.json()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(data['full_name'], 'Scan Student')
+        self.assertEqual(data['enrollment_number'], 'SCAN-001')
+        self.assertEqual(data['branch'], 'Science Branch')
+        self.assertEqual(data['profile_photo'], 'data:image/jpeg;base64,' + base64.b64encode(b'admin-uploaded-photo').decode())
+        self.assertEqual(data['pdf_url'], reverse('dashboard:token_pdf', args=[token.public_id]))
 
     @override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
     def test_token_pdf_is_emailed_to_student(self):

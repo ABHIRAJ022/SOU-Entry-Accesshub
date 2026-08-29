@@ -7,9 +7,9 @@ def seo(request):
     path = request.path
     private_prefixes = ('/accounts/', '/dashboard/', '/admin/', '/api/')
     descriptions = {
-        '/accounts/login/': 'Securely sign in to Smart Campus using your approved campus account.',
-        '/accounts/register/': 'Create a Smart Campus account for student, administrator, or security staff access.',
-        '/accounts/verify-otp/': 'Verify your Smart Campus email address with a secure one-time code.',
+        '/accounts/login/': 'Securely sign in to Your Campus Token using your approved campus account.',
+        '/accounts/register/': 'Create a Your Campus Token account for student, administrator, or security staff access.',
+        '/accounts/verify-otp/': 'Verify your Your Campus Token email address with a secure one-time code.',
     }
     canonical_path = urlsplit(request.get_full_path())._replace(query='', fragment='').geturl()
     return {

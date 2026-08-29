@@ -119,7 +119,7 @@ def send_otp(user):
     code = f'{secrets.randbelow(1000000):06d}'
     user.otps.filter(used_at__isnull=True).update(used_at=__import__('django.utils.timezone', fromlist=['now']).now())
     EmailOTP.objects.create(user=user, code_hash=make_password(code))
-    send_mail('Smart Campus email verification', f'Your verification code is {code}. It expires in 10 minutes.', settings.DEFAULT_FROM_EMAIL, [user.email], fail_silently=False)
+    send_mail('Verify your Your Campus Token email address', f'Hello {user.full_name},\n\nUse this one-time verification code to confirm your Your Campus Token email address:\n\n{code}\n\nThis code expires in 10 minutes. Enter it on the verification page to finish registration. Never share this code with anyone. If you did not create this account, you can ignore this email.', settings.DEFAULT_FROM_EMAIL, [user.email], fail_silently=False)
 
 @require_POST
 def logout_view(request): logout(request); return redirect('accounts:login')
