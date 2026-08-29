@@ -28,8 +28,46 @@ document.addEventListener('DOMContentLoaded', () => {
   const guestTokenPdf = document.querySelector('[data-guest-token-pdf]');
   const guestQueueTokens = document.querySelectorAll('[data-guest-queue-token]');
 
+  const toExpiryEpoch = (value) => {
+    if (value === undefined || value === null || value === '') return NaN;
+    const raw = String(value).trim();
+    if (!raw) return NaN;
+    if (/^\d+$/.test(raw)) {
+      const numeric = Number(raw);
+      return numeric > 1e12 ? numeric : numeric * 1000;
+    }
+    const parsed = Date.parse(raw);
+    return Number.isFinite(parsed) ? parsed : NaN;
+  };
+
+  const resolveExpiryEpoch = (card) => {
+    if (!card || !card.dataset) return NaN;
+    const candidates = [
+      card.dataset.tokenExpiresMs,
+      card.dataset.expiresAtMs,
+      card.dataset.tokenExpiresEpoch,
+      card.dataset.expiresAtEpoch,
+      card.dataset.tokenExpires,
+      card.dataset.expiresAt,
+    ];
+    for (const candidate of candidates) {
+      const epoch = toExpiryEpoch(candidate);
+      if (Number.isFinite(epoch) && epoch > 0) return epoch;
+    }
+    return NaN;
+  };
+
   const persistGuestToken = (payload) => {
-    try { localStorage.setItem('smartcampus_guest_token', JSON.stringify(payload)); } catch (error) {}
+    try {
+      if (payload && !payload.expiresAtMs) {
+        const expiresAt = payload.expiresAt || (guestTokenCard && guestTokenCard.dataset && guestTokenCard.dataset.tokenExpires);
+        if (expiresAt) {
+          const parsed = toExpiryEpoch(expiresAt);
+          if (Number.isFinite(parsed)) payload.expiresAtMs = Math.floor(parsed / 1000);
+        }
+      }
+      localStorage.setItem('smartcampus_guest_token', JSON.stringify(payload));
+    } catch (error) {}
   };
 
   const restoreGuestToken = () => {
@@ -39,6 +77,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!saved || !saved.tokenId || !saved.expiresAt) return;
       guestTokenCard.dataset.tokenId = saved.tokenId;
       guestTokenCard.dataset.tokenExpires = saved.expiresAt;
+      if (saved.expiresAtMs) guestTokenCard.dataset.tokenExpiresMs = String(saved.expiresAtMs);
       guestTokenCard.dataset.tokenPdfUrl = saved.pdfUrl || guestTokenCard.dataset.tokenPdfUrl;
       guestTokenCard.dataset.tokenQrUrl = saved.qrUrl || guestTokenCard.dataset.tokenQrUrl;
       guestTokenCard.dataset.tokenStatusUrl = saved.statusUrl || guestTokenCard.dataset.tokenStatusUrl;
@@ -48,12 +87,47 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (error) {}
   };
 
+  const humanFriendlyRemaining = (seconds) => {
+    if (!Number.isFinite(seconds) || seconds <= 0) return 'Expired';
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const parts = [];
+    if (days) parts.push(`${days}d`);
+    if (hours) parts.push(`${hours}h`);
+    if (minutes) parts.push(`${minutes}m`);
+    if (!parts.length) parts.push(`${seconds}s`);
+    return parts.join(' ');
+  };
+
   const renderGuestTokenCountdown = async () => {
     if (!guestTokenCard || !guestTokenCountdown || !guestTokenStatus) return;
-    const expiresAt = Date.parse(guestTokenCard.dataset.tokenExpires || '');
-    if (!expiresAt) return;
+    const friendlyEl = document.querySelector('[data-guest-token-countdown-text]');
+    const expiresAt = resolveExpiryEpoch(guestTokenCard);
+    if (!Number.isFinite(expiresAt) || expiresAt <= 0) {
+      guestTokenCountdown.textContent = '00:00:00';
+      if (friendlyEl) friendlyEl.textContent = '';
+      guestTokenStatus.textContent = 'CHECKING';
+      const statusUrl = guestTokenCard.dataset.tokenStatusUrl;
+      if (statusUrl && Date.now() - lastStatusCheck >= 60000) {
+        lastStatusCheck = Date.now();
+        try {
+          const response = await fetch(statusUrl, {credentials: 'same-origin', headers: {'Accept': 'application/json'}});
+          if (response.ok) {
+            const data = await response.json();
+            if (data.expires_at) {
+              guestTokenCard.dataset.tokenExpires = data.expires_at;
+              guestTokenCard.dataset.tokenExpiresMs = String(Math.floor(Date.parse(data.expires_at) / 1000));
+            }
+            guestTokenStatus.textContent = data.status || guestTokenStatus.textContent;
+          }
+        } catch (error) {}
+      }
+      return;
+    }
     const remaining = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
     guestTokenCountdown.textContent = `${String(Math.floor(remaining / 3600)).padStart(2, '0')}:${String(Math.floor((remaining % 3600) / 60)).padStart(2, '0')}:${String(remaining % 60).padStart(2, '0')}`;
+    if (friendlyEl) friendlyEl.textContent = humanFriendlyRemaining(remaining);
     if (!remaining) guestTokenStatus.textContent = 'EXPIRED';
     else guestTokenStatus.textContent = 'ACTIVE';
     persistGuestToken({
@@ -72,7 +146,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (response.ok) {
           const data = await response.json();
           guestTokenStatus.textContent = data.status || guestTokenStatus.textContent;
-          if (data.expires_at) guestTokenCard.dataset.tokenExpires = data.expires_at;
+          if (data.expires_at) {
+            guestTokenCard.dataset.tokenExpires = data.expires_at;
+            guestTokenCard.dataset.tokenExpiresMs = String(Math.floor(Date.parse(data.expires_at) / 1000));
+          }
         }
       } catch (error) {}
     }
@@ -89,10 +166,31 @@ document.addEventListener('DOMContentLoaded', () => {
     const countdownEl = card.querySelector('[data-guest-queue-countdown]');
     const updateQueueCard = async () => {
       if (!statusEl || !countdownEl) return;
-      const expiresAt = Date.parse(card.dataset.tokenExpires || '');
-      if (!expiresAt) return;
+      const friendlyEl = card.querySelector('[data-guest-queue-countdown-text]');
+      const expiresAt = resolveExpiryEpoch(card);
+      if (!Number.isFinite(expiresAt) || expiresAt <= 0) {
+        countdownEl.textContent = '00:00:00';
+        if (friendlyEl) friendlyEl.textContent = '';
+        statusEl.textContent = 'CHECKING';
+        if (card.dataset.tokenStatusUrl && Date.now() - lastStatusCheck >= 60000) {
+          lastStatusCheck = Date.now();
+          try {
+            const response = await fetch(card.dataset.tokenStatusUrl, {credentials: 'same-origin', headers: {'Accept': 'application/json'}});
+            if (response.ok) {
+              const data = await response.json();
+              if (data.status) statusEl.textContent = data.status;
+              if (data.expires_at) {
+                card.dataset.tokenExpires = data.expires_at;
+                card.dataset.tokenExpiresMs = String(Math.floor(Date.parse(data.expires_at) / 1000));
+              }
+            }
+          } catch (error) {}
+        }
+        return;
+      }
       const remaining = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
       countdownEl.textContent = `${String(Math.floor(remaining / 3600)).padStart(2, '0')}:${String(Math.floor((remaining % 3600) / 60)).padStart(2, '0')}:${String(remaining % 60).padStart(2, '0')}`;
+      if (friendlyEl) friendlyEl.textContent = humanFriendlyRemaining(remaining);
       statusEl.textContent = remaining ? 'ACTIVE' : 'EXPIRED';
       if (card.dataset.tokenStatusUrl && !remaining && Date.now() - lastStatusCheck >= 60000) {
         lastStatusCheck = Date.now();
@@ -134,7 +232,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const notify = (message, key) => {
     if (notified.has(key)) return;
     notified.add(key);
-    if ('Notification' in window && Notification.permission === 'granted') new Notification('Smart Campus token', {body: message});
+    if ('Notification' in window && Notification.permission === 'granted') new Notification('Your Campus Token pass', {body: message});
   };
 
   const startCountdown = (data) => {
@@ -166,7 +264,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const startPersistentCountdown = () => {
     if (!persistentToken || !persistentCountdown) return;
-    const expiry = Date.parse(persistentToken.dataset.tokenExpires);
+    // Support epoch-ms if available, otherwise parse ISO timestamp
+    let expiry = NaN;
+    if (persistentToken.dataset.tokenExpiresMs) expiry = Number(persistentToken.dataset.tokenExpiresMs) * 1000;
+    else expiry = Date.parse(persistentToken.dataset.tokenExpires || '');
     const statusUrl = persistentToken.dataset.tokenStatusUrl;
     const update = async () => {
       const seconds = Math.max(0, Math.floor((expiry - Date.now()) / 1000));
@@ -219,8 +320,17 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!window.confirm('Cancel this live token?')) return;
     button.disabled = true;
     const response = await fetch(button.dataset.url, {method: 'POST', credentials: 'same-origin', headers: {'X-CSRFToken': csrfToken(), 'Accept': 'application/json'}});
-    if (response.ok) window.location.reload();
-    else { button.disabled = false; window.alert((await response.json()).error || 'The token could not be cancelled.'); }
+    if (response.ok) {
+      window.location.reload();
+    } else {
+      button.disabled = false;
+      try {
+        const payload = await response.json();
+        window.alert(payload.error || 'The token could not be cancelled.');
+      } catch (err) {
+        window.alert('The token could not be cancelled. Please refresh the page and try again.');
+      }
+    }
   }));
   const search = document.querySelector('[data-student-search]');
   const results = document.querySelector('[data-student-results]');
