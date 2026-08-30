@@ -38,10 +38,25 @@ def send_token_expiry_notice(token, kind):
     if TokenNotification.objects.filter(token=token, kind=kind).exists():
         return
     messages = {
-            '2m': f'Your Campus Token pass {token.public_id} expires in about 2 minutes at {_ist(token.expires_at)}. If you need continued access, return to your dashboard and generate a new pass after this one expires.',
+            '2m': (
+                f"Hello {token.holder_name or token.user.full_name},\n\n"
+                f"Your Campus Token entry pass (ID: {token.public_id}) is due to expire in about 2 minutes at {_ist(token.expires_at)}.\n\n"
+                "If you need continued access, open your dashboard and generate a new pass after this one expires. View your dashboard here: /dashboard/\n\n"
+                "Token details:\n"
+                f"- Token ID: {token.public_id}\n"
+                f"- Valid until: {_ist(token.expires_at)}\n"
+                f"- Validity: {token.duration_minutes} minutes\n\n"
+                "If you did not create this pass or believe this is an error, contact your campus administrator immediately."
+            ),
     }
     try:
-        message = messages.get(kind, f'Your Campus Token pass {token.public_id} expires soon at {_ist(token.expires_at)}.')
+        default_message = (
+            f"Hello {token.holder_name or token.user.full_name},\n\n"
+            f"Your Campus Token entry pass (ID: {token.public_id}) will expire at {_ist(token.expires_at)}.\n\n"
+            "Please return to your dashboard (/dashboard/) to generate a new pass if you require continued access.\n\n"
+            "If you did not create this pass or believe this is an error, contact your campus administrator immediately."
+        )
+        message = messages.get(kind, default_message)
         send_mail('Your Campus Token pass expires soon', message, settings.DEFAULT_FROM_EMAIL, [token.user.email], fail_silently=False)
         TokenNotification.objects.get_or_create(token=token, kind=kind)
     except (OSError, SMTPException):
