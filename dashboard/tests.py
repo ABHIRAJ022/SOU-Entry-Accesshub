@@ -11,7 +11,7 @@ from PIL import Image
 from accounts.models import Branch, User
 from biometrics.models import IdentityVerification
 from .models import CampusLocation, CampusToken, GuestTokenRequest, TokenNotification
-from .token_utils import signed_payload
+from .token_utils import qr_data_url, signed_payload
 from .token_utils import signed_payload, verify_signed_payload
 from .notifications import send_token_created
 
@@ -34,6 +34,20 @@ class StudentDashboardTests(TestCase):
         session['identity_verification_id'] = verification.pk
         session['identity_verified_at'] = timezone.now().timestamp()
         session.save()
+
+    def test_qr_data_url_is_cached_for_repeated_dashboard_renders(self):
+        branch = Branch.objects.create(name='Cache Branch', code='CACHE')
+        user = User.objects.create_user(
+            email='cache@example.com', password='StrongPassword123!',
+            full_name='Cache Student', enrollment_number='CACHE-001', branch=branch,
+        )
+        token, _ = CampusToken.issue(user, duration_minutes=60)
+
+        first = qr_data_url(token)
+        second = qr_data_url(token)
+
+        self.assertTrue(first.startswith('data:image/png;base64,'))
+        self.assertEqual(first, second)
 
     def test_approved_student_sees_approved_status(self):
         user = User.objects.create_user(

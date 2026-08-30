@@ -14,7 +14,7 @@ from django.views.decorators.http import require_GET, require_POST
 from biometrics.snapshots import SnapshotError, process_webcam_snapshot
 from accounts.models import User
 from .models import CampusToken, GuestTokenRequest, TokenAudit
-from .token_utils import pdf_pass, qr_png, signed_payload, token_from_signed_payload
+from .token_utils import pdf_pass, qr_data_url, qr_png, signed_payload, token_from_signed_payload
 from .models import CampusLocation
 from .notifications import send_account_approved, send_token_created, send_token_expiry_notice
 
@@ -44,9 +44,9 @@ def home(request):
         'email_verified': request.user.is_email_verified,
         'approval_status': 'approved' if request.user.is_approved_by_admin else ('rejected' if not request.user.is_active else 'pending'),
         'active_token': active_token,
-        'active_token_qr': 'data:image/png;base64,' + base64.b64encode(qr_png(active_token)).decode() if active_token else '',
+        'active_token_qr': qr_data_url(active_token) if active_token else '',
         'latest_token': latest_token,
-        'latest_token_qr': 'data:image/png;base64,' + base64.b64encode(qr_png(latest_token)).decode() if latest_token else '',
+        'latest_token_qr': qr_data_url(latest_token) if latest_token else '',
         'token_history': tokens[:20],
     })
 
@@ -142,7 +142,7 @@ def guest_requests(request):
     ).order_by('-created_at')
     for guest in requests:
         if guest.status == GuestTokenRequest.Status.APPROVED and guest.guest_token:
-            guest.token_qr = 'data:image/png;base64,' + base64.b64encode(qr_png(guest.guest_token)).decode()
+            guest.token_qr = qr_data_url(guest.guest_token)
         else:
             guest.token_qr = ''
     return render(request, 'dashboard/guest_requests.html', {'guest_requests': requests, 'pending_count': requests.filter(status=GuestTokenRequest.Status.PENDING).count()})
@@ -160,7 +160,7 @@ def guest_request_detail(request, request_id):
     photo = 'data:image/jpeg;base64,' + base64.b64encode(guest.live_photo).decode() if guest.live_photo else ''
     guest_token_qr = ''
     if guest.guest_token:
-        guest_token_qr = 'data:image/png;base64,' + base64.b64encode(qr_png(guest.guest_token)).decode()
+        guest_token_qr = qr_data_url(guest.guest_token)
     return render(request, 'dashboard/guest_request_detail.html', {
         'guest_request': guest,
         'guest_photo': photo,

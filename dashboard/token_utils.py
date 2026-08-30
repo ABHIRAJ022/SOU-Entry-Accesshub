@@ -2,6 +2,7 @@ import base64
 import hashlib
 import hmac
 import json
+from functools import lru_cache
 from io import BytesIO
 
 import qrcode
@@ -47,11 +48,20 @@ def token_from_signed_payload(value):
     return CampusToken.objects.filter(public_id=payload.get('token_id'), user_id=payload.get('user_id'), guest_request_id=payload.get('guest_request_id')).first()
 
 
-def qr_png(token):
-    image = qrcode.make(signed_payload(token))
+@lru_cache(maxsize=512)
+def _qr_png_for_payload(payload):
+    image = qrcode.make(payload)
     output = BytesIO()
     image.save(output, format='PNG')
     return output.getvalue()
+
+
+def qr_png(token):
+    return _qr_png_for_payload(signed_payload(token))
+
+
+def qr_data_url(token):
+    return 'data:image/png;base64,' + base64.b64encode(qr_png(token)).decode()
 
 
 def pdf_pass(token):
