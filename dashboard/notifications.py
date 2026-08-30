@@ -14,7 +14,15 @@ def _ist(value):
 
 
 def send_account_approved(user):
-    _send('account-approved', 'Your Campus Token account is approved', f'Hello {user.full_name},\n\nYour Campus Token account has been approved by the campus administrator. You can now sign in with your registered email address and use the features available for your account role.\n\nIf you are a student, complete identity verification before generating a campus entry token. If you are security staff, open the gate scanner to validate signed QR passes.\n\nIf you did not expect this approval, contact your campus administrator.', user.email)
+    subject = 'Your Campus Token account is approved'
+    body = (
+        f"Hello {user.full_name},\n\n"
+        f"Account approved for role: {user.get_role_display()}.\n\n"
+        "You can now sign in: /accounts/login/\n\n"
+        "If you are a student, complete identity verification before generating a campus entry pass.\n\n"
+        "If you did not expect this approval, contact your campus administrator."
+    )
+    _send('account-approved', subject, body, user.email)
 
 
 def send_token_created(token):
@@ -22,12 +30,16 @@ def send_token_created(token):
     if not recipient:
         return
     try:
-        message = EmailMessage(
-            'Your Campus Token pass is ready',
-            f'Hello {token.holder_name},\n\nYour Campus Token entry pass has been created successfully.\n\nToken ID: {token.public_id}\nValid until: {_ist(token.expires_at)}\nValidity: {token.duration_minutes} minutes\n\nThe signed PDF pass is attached to this email. Present the QR code at the campus entry checkpoint before it expires. The pass is linked to your verified profile and must not be shared with another person.\n\nIf any profile information is incorrect, contact campus administration before using the pass.',
-            settings.DEFAULT_FROM_EMAIL,
-            [recipient],
+        subject = 'Your Campus Token pass is ready'
+        body = (
+            f"Hello {token.holder_name or token.user.full_name},\n\n"
+            f"Token ID: {token.public_id}\n"
+            f"Expires: {_ist(token.expires_at)}\n"
+            f"Validity: {token.duration_minutes} minutes\n\n"
+            "The signed PDF pass is attached to this email. Present the QR at campus entry and do not share this pass.\n\n"
+            "If any profile information is incorrect, contact campus administration."
         )
+        message = EmailMessage(subject, body, settings.DEFAULT_FROM_EMAIL, [recipient])
         message.attach(f'campus-pass-{token.public_id}.pdf', pdf_pass(token), 'application/pdf')
         message.send(fail_silently=False)
     except (OSError, SMTPException):
