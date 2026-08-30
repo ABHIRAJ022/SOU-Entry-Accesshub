@@ -97,7 +97,6 @@ class AuthenticationContractTests(TestCase):
             'phone_number': '9601270941',
             'password1': 'StrongPassword123!',
             'password2': 'StrongPassword123!',
-            'security_pin': '123456',
         })
         self.assertRedirects(response, reverse('accounts:verify_otp'))
         self.assertTrue(User.objects.filter(email='newstudent@example.com').exists())
@@ -113,8 +112,6 @@ class AuthenticationContractTests(TestCase):
 
     def test_valid_otp_redirects_to_login(self):
         user = User.objects.create_user(email='verify@example.com', password='StrongPassword123!', full_name='Verify Student', enrollment_number='STU-005', branch=self.branch)
-        user.set_security_pin('123456')
-        user.save(update_fields=['security_pin_hash'])
         from django.contrib.auth.hashers import make_password
         EmailOTP.objects.create(user=user, code_hash=make_password('371090'))
         session = self.client.session
@@ -139,7 +136,6 @@ class AuthenticationContractTests(TestCase):
             'phone_number': '9601270941',
             'password1': 'StrongPassword123!',
             'password2': 'StrongPassword123!',
-            'security_pin': '123456',
         })
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'could not send the verification email')
@@ -160,7 +156,6 @@ class AuthenticationContractTests(TestCase):
     def test_staff_registration_form_hides_student_only_fields(self):
         response = self.client.get(reverse('accounts:register'))
         self.assertContains(response, 'data-student-only-field="branch"')
-        self.assertContains(response, 'data-student-only-field="security_pin"')
         self.assertContains(response, 'register.js')
 
     def test_staff_cannot_login_before_super_admin_approval(self):

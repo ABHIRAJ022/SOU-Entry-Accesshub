@@ -131,12 +131,9 @@ def verify_identity(request):
         user = _valid_user(request)
         payload = _payload(request)
         snapshot = _snapshot(payload, request)
-        pin = str(payload.get('pin') or '').strip()
         otp_code = str(payload.get('otp') or '').strip()
-        method = 'pin' if pin else 'otp'
-        if method == 'pin':
-            verified = user.check_security_pin(pin)
-        elif len(otp_code) == 4 and otp_code.isdigit():
+        verified = False
+        if len(otp_code) == 4 and otp_code.isdigit():
             otp = user.otps.filter(used_at__isnull=True).order_by('-created_at').first()
             verified = bool(otp and otp.is_valid() and check_password(otp_code, otp.code_hash))
             if verified:
@@ -146,9 +143,9 @@ def verify_identity(request):
                 otp.attempts = min(otp.attempts + 1, 255)
                 otp.save(update_fields=['attempts'])
         else:
-            return _error('Enter your security PIN or request a four-digit emergency code.')
+            return _error('Enter the four-digit emergency code sent to your email or request one.')
         if not verified:
-            return _error('Identity verification failed. Check your PIN or emergency code.')
+            return _error('Identity verification failed. Check your emergency code.')
         verification = IdentityVerification.objects.create(user=user, audit_snapshot=snapshot, snapshot_size=len(snapshot), verification_method=method, expires_at=timezone.now() + timedelta(seconds=settings.IDENTITY_VERIFICATION_MAX_AGE_SECONDS))
         request.session['identity_verified'] = True
         request.session['identity_verification_id'] = verification.pk

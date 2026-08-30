@@ -19,8 +19,11 @@ class IdentityVerificationTests(TestCase):
         self.user = User.objects.create_user(email='identity-student@example.com', password='StrongPassword123!', full_name='Student', enrollment_number='ID-001', branch=branch)
         self.user.is_email_verified = True
         self.user.is_approved_by_admin = True
-        self.user.set_security_pin('123456')
-        self.user.save(update_fields=['is_email_verified', 'is_approved_by_admin', 'security_pin_hash'])
+        from django.contrib.auth.hashers import make_password
+        # Create an email OTP for tests instead of a security PIN
+        from accounts.models import EmailOTP
+        EmailOTP.objects.create(user=self.user, code_hash=make_password('123456'))
+        self.user.save(update_fields=['is_email_verified', 'is_approved_by_admin'])
         self.client.force_login(self.user)
 
     def _image(self):
@@ -29,7 +32,7 @@ class IdentityVerificationTests(TestCase):
         return f"data:image/jpeg;base64,{base64.b64encode(output.getvalue()).decode()}"
 
     def _payload(self):
-        return {'capture_mode': 'webcam', 'capture_id': self.client.session['identity_capture_id'], 'captured_at': time.time(), 'image': self._image(), 'pin': '123456'}
+        return {'capture_mode': 'webcam', 'capture_id': self.client.session['identity_capture_id'], 'captured_at': time.time(), 'image': self._image(), 'otp': '123456'}
 
     def _start(self):
         self.client.get(reverse('biometrics:verify_page'), secure=True)
