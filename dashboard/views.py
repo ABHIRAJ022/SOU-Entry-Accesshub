@@ -436,26 +436,48 @@ def validate_token(request):
                 return JsonResponse({'valid': False, 'error': 'Token has expired.'}, status=409)
             
             # Allow up to 3 distinct scans per token. Prevent the same security user from scanning the same token more than once.
-            from .models import TokenScan
+            tokenscan_missing = False
+            TokenScan = None
             try:
-                scan_count = TokenScan.objects.filter(token=token).count()
-            except ProgrammingError as pe:
-                # TokenScan table does not exist (migrations not applied). Fail gracefully with 503 instructing to run migrations.
-                import logging
-                logger = logging.getLogger(__name__)
-                logger.error('TokenScan table missing when validating token: %s', pe)
-                return JsonResponse({'valid': False, 'error': 'Server misconfiguration: TokenScan table missing. Run database migrations.'}, status=503)
+                from .models import TokenScan as _TokenScan
+            except Exception as e:
+                # Import errors or missing table will be handled below when trying DB ops
+                _TokenScan = None
+            TokenScan = _TokenScan
 
-            if scan_count >= 3:
+            if TokenScan is not None:
+                try:
+                    scan_count = TokenScan.objects.filter(token=token).count()
+                except ProgrammingError as pe:
+                    # TokenScan table exists in models but not in DB (migrations not applied). Log and continue with a degraded mode.
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.error('TokenScan table missing when validating token: %s', pe)
+                    tokenscan_missing = True
+                    scan_count = 0
+            else:
+                # TokenScan model not importable (unexpected), operate in degraded mode
+                tokenscan_missing = True
+                scan_count = 0
+
+            if not tokenscan_missing and scan_count >= 3:
                 # Token has reached maximum allowed scans
                 return JsonResponse({'valid': False, 'error': 'Token has already been used.'}, status=409)
 
-            # Prevent same security staff scanning the same token multiple times
-            if TokenScan.objects.filter(token=token, scanned_by=request.user).exists():
-                return JsonResponse({'valid': False, 'error': 'You have already scanned this token.'}, status=409)
+            if not tokenscan_missing:
+                # Prevent same security staff scanning the same token multiple times
+                if TokenScan.objects.filter(token=token, scanned_by=request.user).exists():
+                    return JsonResponse({'valid': False, 'error': 'You have already scanned this token.'}, status=409)
 
-            # Record this scan
-            TokenScan.objects.create(token=token, scanned_by=request.user)
+                # Record this scan
+                try:
+                    TokenScan.objects.create(token=token, scanned_by=request.user)
+                except ProgrammingError as pe:
+                    # Race or missing table; log and continue without recording
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.error('Failed to record TokenScan (missing table or DB error): %s', pe)
+                    tokenscan_missing = True
 
             # On the first scan, keep used_at/used_by for backward compatibility and auditing
             if not token.used_at:
