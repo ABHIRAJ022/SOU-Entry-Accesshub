@@ -1,11 +1,13 @@
 from django.conf import settings
+from django.contrib import admin
 from django.core.cache import cache
-from django.test import Client, TestCase, override_settings
+from django.db import connection
+from django.test import Client, RequestFactory, TestCase, override_settings
 from django.urls import reverse
 from django.core.files.uploadedfile import SimpleUploadedFile
 from io import BytesIO
 from PIL import Image
-from .admin import AccountUserAdminForm
+from .admin import AccountUserAdmin, AccountUserAdminForm
 from .models import Branch, EmailOTP, User
 
 @override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
@@ -109,6 +111,19 @@ class AuthenticationContractTests(TestCase):
         response = self.client.post(reverse('accounts:resend_otp'))
         self.assertRedirects(response, reverse('accounts:verify_otp'))
         self.assertEqual(EmailOTP.objects.filter(user=user).count(), 1)
+
+    def test_admin_delete_handles_missing_tokenscan_table(self):
+        superuser = User.objects.create_superuser(email='admin-delete@example.com', password='StrongPassword123!', full_name='Admin Delete')
+        user = User.objects.create_user(email='delete-user@example.com', password='StrongPassword123!', full_name='Delete User', enrollment_number='STU-DELETE', branch=self.branch)
+        admin_site = admin.site
+        admin_obj = AccountUserAdmin(User, admin_site)
+        with connection.cursor() as cursor:
+            cursor.execute('DROP TABLE IF EXISTS dashboard_tokenscan')
+        request = RequestFactory().get('/admin/accounts/user/')
+        request.user = superuser
+        self.assertEqual(admin_obj.get_deleted_objects([user], request)[1]['accounts.User'], 1)
+        admin_obj.delete_queryset(request, User.objects.filter(pk=user.pk))
+        self.assertTrue(User.objects.filter(pk=user.pk).exists())
 
     def test_valid_otp_redirects_to_login(self):
         user = User.objects.create_user(email='verify@example.com', password='StrongPassword123!', full_name='Verify Student', enrollment_number='STU-005', branch=self.branch)

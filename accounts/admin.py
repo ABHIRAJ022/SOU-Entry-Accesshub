@@ -1,8 +1,18 @@
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.contrib.auth.admin import UserAdmin
+from django.contrib.messages.api import MessageFailure
 from django import forms
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ImproperlyConfigured, ValidationError
+from django.db import connection
+from django.db.utils import DatabaseError, OperationalError, ProgrammingError
 from .models import Branch, EmailOTP, User
+
+
+def _token_scan_table_available():
+    try:
+        return 'dashboard_tokenscan' in connection.introspection.table_names()
+    except Exception:
+        return False
 
 class AccountUserAdminForm(forms.ModelForm):
     profile_photo = forms.ImageField(required=False, label='Profile photo')
@@ -40,6 +50,33 @@ class AccountUserAdmin(UserAdmin):
     ordering = ('email',)
     fieldsets = ((None, {'fields': ('email', 'password')}), ('Profile', {'fields': ('full_name', 'enrollment_number', 'phone_number', 'profile_photo', 'role', 'branch')}), ('Access', {'fields': ('is_active', 'is_staff', 'is_superuser', 'is_email_verified', 'is_approved_by_admin', 'is_approved_by_super_admin', 'groups', 'user_permissions')}))
     add_fieldsets = ((None, {'classes': ('wide',), 'fields': ('email', 'full_name', 'password1', 'password2')}),)
+
+    def get_deleted_objects(self, objs, request):
+        if not _token_scan_table_available():
+            model_count = {self.model._meta.label: len(objs)}
+            return [], model_count, set(), set()
+        try:
+            return super().get_deleted_objects(objs, request)
+        except (DatabaseError, ProgrammingError, OperationalError):
+            model_count = {self.model._meta.label: len(objs)}
+            return [], model_count, set(), set()
+
+    def delete_queryset(self, request, queryset):
+        if not _token_scan_table_available():
+            try:
+                if hasattr(request, '_messages'):
+                    messages.error(request, 'User deletion could not continue because the TokenScan database table is missing. Run the migrations and try again.')
+            except (AttributeError, ImproperlyConfigured, MessageFailure):
+                pass
+            return
+        try:
+            super().delete_queryset(request, queryset)
+        except (DatabaseError, ProgrammingError, OperationalError):
+            try:
+                if hasattr(request, '_messages'):
+                    messages.error(request, 'User deletion could not continue because the TokenScan database table is missing. Run the migrations and try again.')
+            except (AttributeError, ImproperlyConfigured, MessageFailure):
+                pass
 
     def get_fieldsets(self, request, obj=None):
         fieldsets = super().get_fieldsets(request, obj)
