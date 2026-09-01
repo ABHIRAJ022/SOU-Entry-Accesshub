@@ -9,7 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
     enrollment: document.querySelector('[data-scan-enrollment]'), email: document.querySelector('[data-scan-email]'),
     mobile: document.querySelector('[data-scan-mobile]'), gender: document.querySelector('[data-scan-gender]'),
     branch: document.querySelector('[data-scan-branch]'), purpose: document.querySelector('[data-scan-purpose]'),
-    expires: document.querySelector('[data-scan-expires]'), tokenId: document.querySelector('[data-scan-token-id]'),
+    generated: document.querySelector('[data-scan-generated]'), expires: document.querySelector('[data-scan-expires]'), tokenId: document.querySelector('[data-scan-token-id]'),
   };
   const pdf = document.querySelector('[data-scan-pdf]');
   const show = (valid, message) => {
@@ -20,7 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   const showDetails = (data) => {
-    Object.entries({name: data.full_name, holderType: data.holder_type, enrollment: data.enrollment_number || 'Not provided', email: data.email || 'Not provided', mobile: data.phone_number || 'Not provided', gender: data.gender || 'Not provided', branch: data.branch || 'Not provided', purpose: data.purpose || 'Not provided', expires: new Date(data.expires_at).toLocaleString(), tokenId: data.token_id}).forEach(([key, value]) => { fields[key].textContent = value; });
+    Object.entries({name: data.full_name, holderType: data.holder_type, enrollment: data.enrollment_number || 'Not provided', email: data.email || 'Not provided', mobile: data.phone_number || 'Not provided', gender: data.gender || 'Not provided', branch: data.branch || 'Not provided', purpose: data.purpose || 'Not provided', generated: new Date(data.created_at).toLocaleString(), expires: new Date(data.expires_at).toLocaleString(), tokenId: data.token_id}).forEach(([key, value]) => { fields[key].textContent = value; });
     if (data.profile_photo) { photo.src = data.profile_photo; photo.alt = `Profile photo of ${data.full_name}`; photo.classList.remove('d-none'); }
     else { photo.removeAttribute('src'); photo.classList.add('d-none'); }
     pdf.href = data.pdf_url;
