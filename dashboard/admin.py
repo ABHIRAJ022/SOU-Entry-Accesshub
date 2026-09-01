@@ -10,10 +10,18 @@ class CampusLocationAdmin(admin.ModelAdmin):
     search_fields = ('name', 'building_code')
 
 
+class TokenScanInline(admin.TabularInline):
+    model = TokenScan
+    fields = ('scanned_by', 'scanned_at')
+    readonly_fields = ('scanned_by', 'scanned_at')
+    extra = 0
+    can_delete = False
+
 @admin.register(CampusToken)
 class CampusTokenAdmin(admin.ModelAdmin):
     list_display = ('public_id', 'user', 'guest_request', 'expires_at', 'revoked_at', 'used_at')
     readonly_fields = ('token_hash', 'public_id', 'created_at')
+    inlines = (TokenScanInline,)
 
 
 @admin.register(TokenAudit)
