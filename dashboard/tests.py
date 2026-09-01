@@ -1,7 +1,8 @@
 import base64
 import time
 from io import BytesIO
-from django.test import TestCase, override_settings
+from django.test import TestCase, RequestFactory, override_settings
+from django.contrib import admin
 from django.core import mail
 from django.core.cache import cache
 from django.db import connection
@@ -11,6 +12,7 @@ from datetime import timedelta
 from PIL import Image
 from accounts.models import Branch, User
 from biometrics.models import IdentityVerification
+from .admin import CampusTokenAdmin
 from .models import CampusLocation, CampusToken, GuestTokenRequest, TokenNotification
 from .token_utils import qr_data_url, signed_payload
 from .token_utils import signed_payload, verify_signed_payload
@@ -551,6 +553,19 @@ class TokenScanTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'Scan history')
         token.refresh_from_db()
+
+    def test_admin_delete_handles_missing_tokenscan_table(self):
+        admin_user = User.objects.create_superuser(email='admin-campus-token@example.com', password='StrongPassword123!', full_name='Campus Admin')
+        student = User.objects.create_user(email='campus-token-student@example.com', password='StrongPassword123!', full_name='Campus Token Student', role=User.Role.STUDENT, is_active=True, is_approved_by_admin=True)
+        token, _ = CampusToken.issue(student, duration_minutes=60)
+        with connection.cursor() as cursor:
+            cursor.execute('DROP TABLE IF EXISTS dashboard_tokenscan')
+        request = RequestFactory().get('/admin/dashboard/campustoken/')
+        request.user = admin_user
+        admin_obj = CampusTokenAdmin(CampusToken, admin.site)
+        self.assertEqual(admin_obj.get_deleted_objects([token], request)[1]['dashboard.CampusToken'], 1)
+        admin_obj.delete_queryset(request, CampusToken.objects.filter(pk=token.pk))
+        self.assertTrue(CampusToken.objects.filter(pk=token.pk).exists())
 
     def test_same_user_cannot_scan_twice(self):
         # create first scan
