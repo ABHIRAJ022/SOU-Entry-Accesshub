@@ -5,6 +5,7 @@ from decimal import Decimal, InvalidOperation
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.db import transaction
+from django.db.utils import ProgrammingError
 from django.db.models import Prefetch, Q
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -436,7 +437,15 @@ def validate_token(request):
             
             # Allow up to 3 distinct scans per token. Prevent the same security user from scanning the same token more than once.
             from .models import TokenScan
-            scan_count = TokenScan.objects.filter(token=token).count()
+            try:
+                scan_count = TokenScan.objects.filter(token=token).count()
+            except ProgrammingError as pe:
+                # TokenScan table does not exist (migrations not applied). Fail gracefully with 503 instructing to run migrations.
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error('TokenScan table missing when validating token: %s', pe)
+                return JsonResponse({'valid': False, 'error': 'Server misconfiguration: TokenScan table missing. Run database migrations.'}, status=503)
+
             if scan_count >= 3:
                 # Token has reached maximum allowed scans
                 return JsonResponse({'valid': False, 'error': 'Token has already been used.'}, status=409)
