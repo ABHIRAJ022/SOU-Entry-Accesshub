@@ -380,42 +380,82 @@ def delete_location(request, location_id):
 @role_required(User.Role.SECURITY)
 def validate_token(request):
     try:
-        payload = json.loads(request.body)
-        token = token_from_signed_payload(payload.get('qr_payload', ''))
-    except (json.JSONDecodeError, TypeError):
-        token = None
-    guest_approved = token and token.guest_request_id and token.guest_request.status == GuestTokenRequest.Status.APPROVED
-    student_approved = token and token.user_id and token.user.is_active and token.user.can_login
-    if not token or not (guest_approved or student_approved):
-        return JsonResponse({'valid': False, 'error': 'Invalid token signature or student approval.'}, status=400)
-    with transaction.atomic():
-        token = CampusToken.objects.select_for_update().select_related('user__branch', 'guest_request').filter(pk=token.pk).first()
-        if not token or token.used_at or token.revoked_at or timezone.now() >= token.expires_at:
-            if token:
+        try:
+            payload = json.loads(request.body)
+            qr_payload = payload.get('qr_payload', '')
+            
+            if not qr_payload:
+                return JsonResponse({'valid': False, 'error': 'No QR payload provided.'}, status=400)
+            
+            token = token_from_signed_payload(qr_payload)
+        except (json.JSONDecodeError, TypeError, ValueError) as e:
+            return JsonResponse({'valid': False, 'error': f'Invalid QR code format: {str(e)}'}, status=400)
+        
+        # Check if token exists and is valid
+        guest_approved = token and token.guest_request_id and token.guest_request.status == GuestTokenRequest.Status.APPROVED
+        student_approved = token and token.user_id and token.user.is_active and token.user.can_login
+        
+        if not token:
+            return JsonResponse({'valid': False, 'error': 'Token not found. Invalid QR code.'}, status=400)
+        
+        if not (guest_approved or student_approved):
+            if token.user_id and not token.user.is_active:
+                return JsonResponse({'valid': False, 'error': 'Student account is inactive.'}, status=400)
+            if token.user_id and not token.user.can_login:
+                return JsonResponse({'valid': False, 'error': 'Student account is not verified or approved.'}, status=400)
+            if token.guest_request_id:
+                status = token.guest_request.status
+                return JsonResponse({'valid': False, 'error': f'Guest request status: {status}. Not approved.'}, status=400)
+            return JsonResponse({'valid': False, 'error': 'Invalid token or student not approved.'}, status=400)
+        
+        # Validate token state
+        with transaction.atomic():
+            token = CampusToken.objects.select_for_update().select_related('user__branch', 'guest_request').filter(pk=token.pk).first()
+            
+            if not token:
+                return JsonResponse({'valid': False, 'error': 'Token no longer exists.'}, status=409)
+            
+            if token.revoked_at:
+                return JsonResponse({'valid': False, 'error': 'Token has been revoked.'}, status=409)
+            
+            if timezone.now() >= token.expires_at:
                 token.mark_expired()
-            return JsonResponse({'valid': False, 'error': 'Token is expired, revoked, or already used.'}, status=409)
-        token.used_at = timezone.now()
-        token.used_by = request.user
-        token.save(update_fields=['used_at', 'used_by'])
-    is_guest = bool(token.guest_request_id)
-    holder = token.guest_request if is_guest else token.user
-    profile_photo = holder.live_photo if is_guest else holder.profile_photo
-    return JsonResponse({
-        'valid': True,
-        'token_id': str(token.public_id),
-        'holder_type': 'Guest' if is_guest else 'Student',
-        'student': token.holder_name,
-        'full_name': token.holder_name,
-        'email': token.holder_email,
-        'mobile': holder.mobile if is_guest else holder.phone_number,
-        'phone_number': holder.mobile if is_guest else holder.phone_number,
-        'enrollment_number': '' if is_guest else holder.enrollment_number,
-        'gender': holder.get_gender_display() if is_guest else '',
-        'branch': '' if is_guest or not holder.branch_id else holder.branch.name,
-        'purpose': token.guest_request.purpose if is_guest else 'Student access',
-        'duration_minutes': token.duration_minutes,
-        'created_at': token.created_at.isoformat(),
-        'expires_at': token.expires_at.isoformat(),
-        'profile_photo': 'data:image/jpeg;base64,' + base64.b64encode(profile_photo).decode() if profile_photo else '',
-        'pdf_url': reverse('dashboard:token_pdf', args=[token.public_id]),
-    })
+                return JsonResponse({'valid': False, 'error': 'Token has expired.'}, status=409)
+            
+            if token.used_at:
+                return JsonResponse({'valid': False, 'error': 'Token has already been used.'}, status=409)
+            
+            # Mark token as used
+            token.used_at = timezone.now()
+            token.used_by = request.user
+            token.save(update_fields=['used_at', 'used_by'])
+        
+        # Prepare response data
+        is_guest = bool(token.guest_request_id)
+        holder = token.guest_request if is_guest else token.user
+        profile_photo = holder.live_photo if is_guest else holder.profile_photo
+        
+        return JsonResponse({
+            'valid': True,
+            'token_id': str(token.public_id),
+            'holder_type': 'Guest' if is_guest else 'Student',
+            'student': token.holder_name,
+            'full_name': token.holder_name,
+            'email': token.holder_email,
+            'mobile': holder.mobile if is_guest else holder.phone_number,
+            'phone_number': holder.mobile if is_guest else holder.phone_number,
+            'enrollment_number': '' if is_guest else holder.enrollment_number,
+            'gender': holder.get_gender_display() if is_guest else '',
+            'branch': '' if is_guest or not holder.branch_id else holder.branch.name,
+            'purpose': token.guest_request.purpose if is_guest else 'Student access',
+            'duration_minutes': token.duration_minutes,
+            'created_at': token.created_at.isoformat(),
+            'expires_at': token.expires_at.isoformat(),
+            'profile_photo': 'data:image/jpeg;base64,' + base64.b64encode(profile_photo).decode() if profile_photo else '',
+            'pdf_url': reverse('dashboard:token_pdf', args=[token.public_id]),
+        })
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.exception('Error in validate_token endpoint')
+        return JsonResponse({'valid': False, 'error': f'Server error: {str(e)}'}, status=500)

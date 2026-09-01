@@ -57,18 +57,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // Format and display dates
       if (fields.generated) {
-        const generatedDate = new Date(data.created_at);
-        fields.generated.textContent = generatedDate.toLocaleString() || data.created_at;
+        try {
+          const generatedDate = new Date(data.created_at);
+          fields.generated.textContent = generatedDate.toLocaleString() || data.created_at;
+        } catch (e) {
+          fields.generated.textContent = data.created_at || 'Invalid date';
+        }
       }
       if (fields.expires) {
-        const expiresDate = new Date(data.expires_at);
-        fields.expires.textContent = expiresDate.toLocaleString() || data.expires_at;
+        try {
+          const expiresDate = new Date(data.expires_at);
+          fields.expires.textContent = expiresDate.toLocaleString() || data.expires_at;
+        } catch (e) {
+          fields.expires.textContent = data.expires_at || 'Invalid date';
+        }
       }
 
       if (fields.tokenId) fields.tokenId.textContent = data.token_id || 'Not provided';
 
       // Handle profile photo
-      if (data.profile_photo) {
+      if (data.profile_photo && data.profile_photo.trim() !== '') {
         photo.src = data.profile_photo;
         photo.alt = `Profile photo of ${data.full_name}`;
         photo.classList.remove('d-none');
@@ -140,17 +148,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
     try {
       const csrfToken = getCsrfToken();
+      
+      if (!csrfToken) {
+        console.warn('CSRF token not found. Attempting to continue anyway.');
+      }
+
+      console.log('Scanning QR payload:', qrPayload.substring(0, 50) + '...');
+      
       const response = await fetch('/api/tokens/validate/', {
         method: 'POST',
         credentials: 'same-origin',
         headers: {
           'Content-Type': 'application/json',
-          'X-CSRFToken': csrfToken,
+          'X-CSRFToken': csrfToken || '',
           'Accept': 'application/json',
         },
         body: JSON.stringify({ qr_payload: qrPayload }),
       });
 
+      console.log('API Response Status:', response.status);
+      
       const data = await response.json();
       console.log('Token validation response:', data);
 
@@ -158,12 +175,18 @@ document.addEventListener('DOMContentLoaded', () => {
         show(true, `✓ VALID: ${data.student}`);
         showDetails(data);
       } else {
-        show(false, `✗ INVALID: ${data.error || 'Token rejected.'}`);
+        const errorMessage = data.error || 'Token rejected.';
+        console.warn('Token validation failed:', errorMessage);
+        show(false, `✗ INVALID: ${errorMessage}`);
         details.classList.add('d-none');
       }
     } catch (error) {
-      console.error('Error validating token:', error);
-      show(false, 'Error validating token. Please try again.');
+      console.error('Error during token validation:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      });
+      show(false, `Error: ${error.message || 'Failed to validate token'}`);
       details.classList.add('d-none');
     }
 
