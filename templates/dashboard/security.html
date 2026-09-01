@@ -4,6 +4,9 @@
 {% block title %}Security gate | Your Campus Token{% endblock %}
 
 {% block content %}
+<!-- CSRF Token for JavaScript (non-HTTPOnly) -->
+{% csrf_token %}
+
 <h1>Campus verification gate scanner</h1>
 <p class="text-secondary">Scan a signed QR pass once at the gate. Used or expired passes are rejected.</p>
 

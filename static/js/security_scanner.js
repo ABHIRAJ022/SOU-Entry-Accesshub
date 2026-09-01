@@ -26,10 +26,22 @@ document.addEventListener('DOMContentLoaded', () => {
   let scanning = false;
 
   const getCsrfToken = () => {
-    return document.cookie
-      .split('; ')
-      .find((item) => item.startsWith('campus_csrftoken_v2='))
-      ?.split('=')[1] || '';
+    // Method 1: Get from Django's csrf_token form input
+    const csrfInput = document.querySelector('input[name="csrfmiddlewaretoken"]');
+    if (csrfInput && csrfInput.value) {
+      console.log('CSRF token found from form input:', csrfInput.value.substring(0, 10) + '...');
+      return csrfInput.value;
+    }
+    
+    // Method 2: Fallback - try to get from meta tag
+    const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+    if (csrfMeta && csrfMeta.content) {
+      console.log('CSRF token found from meta tag:', csrfMeta.content.substring(0, 10) + '...');
+      return csrfMeta.content;
+    }
+    
+    console.warn('CSRF token not found in form or meta tag');
+    return '';
   };
 
   const show = (valid, message) => {
@@ -150,17 +162,21 @@ document.addEventListener('DOMContentLoaded', () => {
       const csrfToken = getCsrfToken();
       
       if (!csrfToken) {
-        console.warn('CSRF token not found. Attempting to continue anyway.');
+        console.error('CSRF token is missing! This will cause a 403 error.');
+        show(false, 'Security error: CSRF token missing. Please refresh the page.');
+        details.classList.add('d-none');
+        return;
       }
 
       console.log('Scanning QR payload:', qrPayload.substring(0, 50) + '...');
+      console.log('CSRF token length:', csrfToken.length, '(should be 32)');
       
       const response = await fetch('/api/tokens/validate/', {
         method: 'POST',
         credentials: 'same-origin',
         headers: {
           'Content-Type': 'application/json',
-          'X-CSRFToken': csrfToken || '',
+          'X-CSRFToken': csrfToken,
           'Accept': 'application/json',
         },
         body: JSON.stringify({ qr_payload: qrPayload }),
@@ -170,6 +186,13 @@ document.addEventListener('DOMContentLoaded', () => {
       
       const data = await response.json();
       console.log('Token validation response:', data);
+
+      if (response.status === 403) {
+        console.error('CSRF token error - token length:', csrfToken.length);
+        show(false, '✗ CSRF error: Token validation failed. Try refreshing the page.');
+        details.classList.add('d-none');
+        return;
+      }
 
       if (response.ok && data.valid) {
         show(true, `✓ VALID: ${data.student}`);
