@@ -410,7 +410,9 @@ def validate_token(request):
         
         # Validate token state
         with transaction.atomic():
-            token = CampusToken.objects.select_for_update().select_related('user__branch', 'guest_request').filter(pk=token.pk).first()
+            # Lock the token without select_related to avoid outer join issue with FOR UPDATE
+            # (PostgreSQL doesn't allow FOR UPDATE on nullable outer joins)
+            token = CampusToken.objects.select_for_update().filter(pk=token.pk).first()
             
             if not token:
                 return JsonResponse({'valid': False, 'error': 'Token no longer exists.'}, status=409)
