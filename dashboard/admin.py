@@ -92,3 +92,30 @@ class GuestTokenRequestAdmin(admin.ModelAdmin):
     list_filter = ('status',)
     search_fields = ('name', 'email', 'mobile', 'purpose')
     readonly_fields = ('created_at', 'updated_at', 'approved_at')
+
+    def get_deleted_objects(self, objs, request):
+        if not _token_scan_table_available():
+            model_count = {self.model._meta.label: len(objs)}
+            return [], model_count, set(), set()
+        try:
+            return super().get_deleted_objects(objs, request)
+        except (DatabaseError, ProgrammingError, OperationalError):
+            model_count = {self.model._meta.label: len(objs)}
+            return [], model_count, set(), set()
+
+    def delete_queryset(self, request, queryset):
+        if not _token_scan_table_available():
+            try:
+                if hasattr(request, '_messages'):
+                    messages.error(request, 'Guest token request deletion could not continue because the TokenScan database table is missing. Run the migrations and try again.')
+            except (AttributeError, ImproperlyConfigured, MessageFailure):
+                pass
+            return
+        try:
+            super().delete_queryset(request, queryset)
+        except (DatabaseError, ProgrammingError, OperationalError):
+            try:
+                if hasattr(request, '_messages'):
+                    messages.error(request, 'Guest token request deletion could not continue because the TokenScan database table is missing. Run the migrations and try again.')
+            except (AttributeError, ImproperlyConfigured, MessageFailure):
+                pass

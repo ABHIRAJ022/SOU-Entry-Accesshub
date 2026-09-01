@@ -567,6 +567,26 @@ class TokenScanTests(TestCase):
         admin_obj.delete_queryset(request, CampusToken.objects.filter(pk=token.pk))
         self.assertTrue(CampusToken.objects.filter(pk=token.pk).exists())
 
+    def test_guest_request_admin_delete_handles_missing_tokenscan_table(self):
+        admin_user = User.objects.create_superuser(email='admin-guest-request@example.com', password='StrongPassword123!', full_name='Guest Request Admin')
+        guest = GuestTokenRequest.objects.create(
+            name='Guest Request Admin Visitor',
+            gender=GuestTokenRequest.Gender.FEMALE,
+            email='guest-request-admin@example.com',
+            mobile='+91 9999912345',
+            purpose='Visitor test',
+            live_photo=b'photo',
+            duration_minutes=60,
+        )
+        with connection.cursor() as cursor:
+            cursor.execute('DROP TABLE IF EXISTS dashboard_tokenscan')
+        request = RequestFactory().get('/admin/dashboard/guesttokenrequest/')
+        request.user = admin_user
+        admin_obj = admin.site._registry[GuestTokenRequest]
+        self.assertEqual(admin_obj.get_deleted_objects([guest], request)[1]['dashboard.GuestTokenRequest'], 1)
+        admin_obj.delete_queryset(request, GuestTokenRequest.objects.filter(pk=guest.pk))
+        self.assertTrue(GuestTokenRequest.objects.filter(pk=guest.pk).exists())
+
     def test_same_user_cannot_scan_twice(self):
         # create first scan
         from dashboard.models import TokenScan
