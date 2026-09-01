@@ -434,13 +434,25 @@ def validate_token(request):
                 token.mark_expired()
                 return JsonResponse({'valid': False, 'error': 'Token has expired.'}, status=409)
             
-            if token.used_at:
+            # Allow up to 3 distinct scans per token. Prevent the same security user from scanning the same token more than once.
+            from .models import TokenScan
+            scan_count = TokenScan.objects.filter(token=token).count()
+            if scan_count >= 3:
+                # Token has reached maximum allowed scans
                 return JsonResponse({'valid': False, 'error': 'Token has already been used.'}, status=409)
-            
-            # Mark token as used
-            token.used_at = timezone.now()
-            token.used_by = request.user
-            token.save(update_fields=['used_at', 'used_by'])
+
+            # Prevent same security staff scanning the same token multiple times
+            if TokenScan.objects.filter(token=token, scanned_by=request.user).exists():
+                return JsonResponse({'valid': False, 'error': 'You have already scanned this token.'}, status=409)
+
+            # Record this scan
+            TokenScan.objects.create(token=token, scanned_by=request.user)
+
+            # On the first scan, keep used_at/used_by for backward compatibility and auditing
+            if not token.used_at:
+                token.used_at = timezone.now()
+                token.used_by = request.user
+                token.save(update_fields=['used_at', 'used_by'])
         
         # Prepare response data
         is_guest = bool(token.guest_request_id)

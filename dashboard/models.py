@@ -144,3 +144,21 @@ class TokenNotification(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=('token', 'kind'), name='unique_token_notification')]
+
+
+class TokenScan(models.Model):
+    """Record each scan of a token by a security staff member.
+
+    Rules enforced by code and constraints:
+    - A security user may scan a given token at most once (unique constraint).
+    - The application will allow up to 3 distinct scans per token in total.
+    """
+    token = models.ForeignKey(CampusToken, on_delete=models.CASCADE, related_name='scans')
+    scanned_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='token_scans')
+    scanned_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=('token', 'scanned_by'), name='unique_token_scan_per_user'),
+        ]
+        ordering = ['-scanned_at']

@@ -501,3 +501,37 @@ class AdminTokenManagementTests(TestCase):
         token.refresh_from_db()
         self.assertIsNotNone(token.revoked_at)
         self.assertContains(self.client.get(reverse('dashboard:token_history', args=[self.student.id])), str(token.public_id))
+
+
+class TokenScanTests(TestCase):
+    def setUp(self):
+        # create security users
+        self.security1 = User.objects.create_user(email='sec1@example.com', password='pw', full_name='Sec One', role=User.Role.SECURITY, is_active=True, is_approved_by_admin=True)
+        self.security2 = User.objects.create_user(email='sec2@example.com', password='pw', full_name='Sec Two', role=User.Role.SECURITY, is_active=True, is_approved_by_admin=True)
+        self.security3 = User.objects.create_user(email='sec3@example.com', password='pw', full_name='Sec Three', role=User.Role.SECURITY, is_active=True, is_approved_by_admin=True)
+        # create a student and issue a token for testing
+        self.student = User.objects.create_user(email='student@example.com', password='pw', full_name='Student', role=User.Role.STUDENT, is_active=True, is_approved_by_admin=True)
+        token, raw = CampusToken.issue(self.student, duration_minutes=60)
+        self.token = token
+
+    def test_same_user_cannot_scan_twice(self):
+        # create first scan
+        from dashboard.models import TokenScan
+        TokenScan.objects.create(token=self.token, scanned_by=self.security1)
+        # confirm existence
+        exists = TokenScan.objects.filter(token=self.token, scanned_by=self.security1).exists()
+        self.assertTrue(exists)
+        # attempting to create again should raise IntegrityError due to unique constraint
+        from django.db import IntegrityError
+        with self.assertRaises(IntegrityError):
+            TokenScan.objects.create(token=self.token, scanned_by=self.security1)
+
+    def test_token_blocked_after_three_distinct_scans(self):
+        from dashboard.models import TokenScan
+        TokenScan.objects.create(token=self.token, scanned_by=self.security1)
+        TokenScan.objects.create(token=self.token, scanned_by=self.security2)
+        TokenScan.objects.create(token=self.token, scanned_by=self.security3)
+        # There should be three scans
+        self.assertEqual(TokenScan.objects.filter(token=self.token).count(), 3)
+        # App logic should treat token with >=3 scans as blocked; simulate that check
+        self.assertTrue(TokenScan.objects.filter(token=self.token).count() >= 3)

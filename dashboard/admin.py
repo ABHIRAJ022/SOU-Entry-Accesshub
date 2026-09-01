@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import CampusLocation, CampusToken, GuestTokenRequest, TokenAudit, TokenNotification
+from .models import CampusLocation, CampusToken, GuestTokenRequest, TokenAudit, TokenNotification, TokenScan
 
 
 @admin.register(CampusLocation)
@@ -25,6 +25,14 @@ class TokenAuditAdmin(admin.ModelAdmin):
 @admin.register(TokenNotification)
 class TokenNotificationAdmin(admin.ModelAdmin):
     list_display = ('token', 'kind', 'sent_at')
+
+
+@admin.register(TokenScan)
+class TokenScanAdmin(admin.ModelAdmin):
+    list_display = ('token', 'scanned_by', 'scanned_at')
+    list_filter = ('scanned_at', 'scanned_by')
+    search_fields = ('token__public_id', 'scanned_by__email', 'scanned_by__full_name')
+    readonly_fields = ('scanned_at',)
 
 
 @admin.register(GuestTokenRequest)

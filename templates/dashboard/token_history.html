@@ -1,7 +1,28 @@
 {% extends 'base.html' %}
+{% load tz %}
 {% block title %}{{ student.full_name }} token history | Your Campus Token{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4"><div><p class="text-uppercase small fw-bold text-secondary">Student token history</p><h1>{{ student.full_name }}</h1><p class="text-secondary mb-0">{{ student.enrollment_number|default:'No enrollment number' }} - {{ student.email }}</p></div><a class="btn btn-outline-secondary" href="{% url 'dashboard:token_management' %}">Back to token management</a></div>
 <div class="card card-body"><div class="table-responsive"><table class="table align-middle"><thead><tr><th>Generation</th><th>Token ID</th><th>Created</th><th>Expires</th><th>Used</th><th>State</th><th></th></tr></thead><tbody>{% for token in tokens %}<tr><td>{{ token.generation }}</td><td><code>{{ token.public_id }}</code></td><td>{{ token.created_at|date:'M j, Y, g:i A' }}</td><td>{{ token.expires_at|date:'M j, Y, g:i A' }}</td><td>{{ token.used_at|date:'M j, Y, g:i A'|default:'—' }}</td><td>{% if token.used_at %}Used{% elif token.revoked_at %}Closed{% elif token.expires_at <= now %}Expired{% else %}Live{% endif %}</td><td>{% if not token.used_at and not token.revoked_at and token.expires_at > now %}<button type="button" class="btn btn-sm btn-outline-danger" data-cancel-token data-url="{% url 'dashboard:cancel_token' token.public_id %}">Cancel token</button>{% endif %}</td></tr>{% empty %}<tr><td colspan="7" class="text-secondary">This student has no token history.</td></tr>{% endfor %}</tbody></table></div></div>
+
+{% comment %} Show recent scans per token beneath the table for quick audit access {% endcomment %}
+{% for token in tokens %}
+  {% if token.scans.all %}
+  <div class="card card-body mt-3">
+    <h3 class="h6">Scans for token {{ token.public_id }}</h3>
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0">
+        <thead><tr><th>Scanned by</th><th>When</th></tr></thead>
+        <tbody>
+          {% for scan in token.scans.all %}
+          <tr><td>{{ scan.scanned_by.full_name }} &lt;{{ scan.scanned_by.email }}&gt;</td><td>{{ scan.scanned_at|localtime|date:'Y-m-d H:i' }} IST</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+{% endfor %}
+
 {% endblock %}
 {% block scripts %}<script src="{% load static %}{% static 'js/dashboard.js' %}"></script>{% endblock %}
