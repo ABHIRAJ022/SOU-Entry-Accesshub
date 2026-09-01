@@ -282,6 +282,22 @@ class StudentDashboardTests(TestCase):
         self.assertEqual(data['profile_photo'], 'data:image/jpeg;base64,' + base64.b64encode(b'admin-uploaded-photo').decode())
         self.assertEqual(data['pdf_url'], reverse('dashboard:token_pdf', args=[token.public_id]))
 
+    def test_validate_token_handles_missing_scan_table(self):
+        branch = Branch.objects.create(name='Missing Scan Branch', code='MISS')
+        student = User.objects.create_user(email='scan-missing@example.com', password='StrongPassword123!', full_name='Missing Scan Student', enrollment_number='MISS-001', phone_number='9876543210', branch=branch, profile_photo=b'admin-uploaded-photo')
+        student.is_email_verified = True
+        student.is_approved_by_admin = True
+        student.save(update_fields=['is_email_verified', 'is_approved_by_admin'])
+        token, _ = CampusToken.issue(student, 60)
+        security = User.objects.create_user(email='scan-missing-security@example.com', password='StrongPassword123!', full_name='Scan Missing Security', role=User.Role.SECURITY)
+        self.client.force_login(security)
+        with connection.cursor() as cursor:
+            cursor.execute('DROP TABLE IF EXISTS dashboard_tokenscan')
+        response = self.client.post(reverse('validate_token'), {'qr_payload': signed_payload(token)}, content_type='application/json', secure=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['valid'])
+        self.assertFalse(response.json()['scan_recorded'])
+
     @override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
     def test_token_pdf_is_emailed_to_student(self):
         student = User.objects.create_user(email='pdf-student@example.com', password='StrongPassword123!', full_name='PDF Student', enrollment_number='PDF-001')

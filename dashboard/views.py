@@ -5,7 +5,7 @@ import logging
 from decimal import Decimal, InvalidOperation
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.db import transaction
+from django.db import connection, transaction
 from django.db.utils import ProgrammingError
 from django.db.models import Prefetch, Q
 from django.http import HttpResponse, JsonResponse
@@ -33,6 +33,16 @@ def _safe_token_scans(token):
         logger = logging.getLogger(__name__)
         logger.warning('TokenScan data unavailable; skipping scan history for token %s', getattr(token, 'public_id', token.pk), exc_info=True)
         return []
+
+
+def _token_scan_table_available():
+    try:
+        tables = set(connection.introspection.table_names())
+        return 'dashboard_tokenscan' in tables
+    except Exception:
+        logger = logging.getLogger(__name__)
+        logger.warning('Unable to inspect database tables for TokenScan availability.', exc_info=True)
+        return False
 
 
 def role_required(*roles):
@@ -438,77 +448,61 @@ def validate_token(request):
             return JsonResponse({'valid': False, 'error': 'Invalid token or student not approved.'}, status=400)
         
         # Validate token state
+        tokenscan_missing = False
+        TokenScan = None
+        try:
+            from .models import TokenScan as _TokenScan
+            TokenScan = _TokenScan
+            if not _token_scan_table_available():
+                tokenscan_missing = True
+                logger = logging.getLogger(__name__)
+                logger.warning('TokenScan table missing when validating token; continuing without scan tracking.')
+        except Exception as exc:
+            logger = logging.getLogger(__name__)
+            logger.warning('TokenScan model unavailable during validation; continuing without scan tracking: %s', exc)
+            tokenscan_missing = True
+
         with transaction.atomic():
             # Lock the token without select_related to avoid outer join issue with FOR UPDATE
             # (PostgreSQL doesn't allow FOR UPDATE on nullable outer joins)
             token = CampusToken.objects.select_for_update().filter(pk=token.pk).first()
-            
+
             if not token:
                 return JsonResponse({'valid': False, 'error': 'Token no longer exists.'}, status=409)
-            
+
             if token.revoked_at:
                 return JsonResponse({'valid': False, 'error': 'Token has been revoked.'}, status=409)
-            
+
             if timezone.now() >= token.expires_at:
                 token.mark_expired()
                 return JsonResponse({'valid': False, 'error': 'Token has expired.'}, status=409)
-            
-            # Allow up to 3 distinct scans per token. Prevent the same security user from scanning the same token more than once.
-            tokenscan_missing = False
-            TokenScan = None
-            try:
-                from .models import TokenScan as _TokenScan
-            except Exception as e:
-                # Import errors or missing table will be handled below when trying DB ops
-                _TokenScan = None
-            TokenScan = _TokenScan
 
-            if TokenScan is not None:
+            # Allow up to 3 distinct scans per token. Prevent the same security user from scanning the same token more than once.
+            scan_count = 0
+            if not tokenscan_missing and TokenScan is not None:
                 try:
                     scan_count = TokenScan.objects.filter(token=token).count()
                 except ProgrammingError as pe:
-                    # TokenScan table exists in models but not in DB (migrations not applied). Log and continue with a degraded mode.
-                    import logging
                     logger = logging.getLogger(__name__)
-                    logger.error('TokenScan table missing when validating token: %s', pe)
-                    # Rollback the DB connection to clear the aborted transaction state so
-                    # subsequent DB operations (like token.save) don't fail with
-                    # "current transaction is aborted".
-                    try:
-                        from django.db import connection
-                        connection.rollback()
-                    except Exception:
-                        logger.exception('Failed to rollback DB connection after TokenScan ProgrammingError')
+                    logger.warning('TokenScan table missing during token validation; proceeding without scan checks: %s', pe)
                     tokenscan_missing = True
                     scan_count = 0
-            else:
-                # TokenScan model not importable (unexpected), operate in degraded mode
-                tokenscan_missing = True
-                scan_count = 0
 
             if not tokenscan_missing and scan_count >= 3:
                 # Token has reached maximum allowed scans
                 return JsonResponse({'valid': False, 'error': 'Token has already been used.'}, status=409)
 
-            if not tokenscan_missing:
+            if not tokenscan_missing and TokenScan is not None:
                 # Prevent same security staff scanning the same token multiple times
-                if TokenScan.objects.filter(token=token, scanned_by=request.user).exists():
-                    return JsonResponse({'valid': False, 'error': 'You have already scanned this token.'}, status=409)
-
-                # Record this scan
                 try:
+                    if TokenScan.objects.filter(token=token, scanned_by=request.user).exists():
+                        return JsonResponse({'valid': False, 'error': 'You have already scanned this token.'}, status=409)
+
+                    # Record this scan
                     TokenScan.objects.create(token=token, scanned_by=request.user)
                 except ProgrammingError as pe:
-                    # Race or missing table; log and continue without recording
-                    import logging
                     logger = logging.getLogger(__name__)
-                    logger.error('Failed to record TokenScan (missing table or DB error): %s', pe)
-                    # Rollback the DB connection to clear an aborted transaction state.
-                    try:
-                        from django.db import connection
-                        connection.rollback()
-                    except Exception:
-                        logger.exception('Failed to rollback DB connection after TokenScan create ProgrammingError')
+                    logger.warning('TokenScan record unavailable; continuing without scan tracking: %s', pe)
                     tokenscan_missing = True
 
             # On the first scan, keep used_at/used_by for backward compatibility and auditing
@@ -556,7 +550,6 @@ def validate_token(request):
             'scan_recorded': (not tokenscan_missing),
         })
     except Exception as e:
-        import logging
         logger = logging.getLogger(__name__)
         logger.exception('Error in validate_token endpoint')
         return JsonResponse({'valid': False, 'error': f'Server error: {str(e)}'}, status=500)
