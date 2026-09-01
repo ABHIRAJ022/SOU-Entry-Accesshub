@@ -23,7 +23,7 @@
 {% endif %}
 {% if request.user.is_superuser and guest_request.token and guest_request.token.is_active and guest_request.status != 'CANCELLED' %}<button type="button" class="btn btn-outline-danger mt-3" data-cancel-token data-url="{% url 'dashboard:cancel_token' guest_request.token.public_id %}">Cancel live token</button>{% endif %}
 
-{% if guest_request.guest_token and guest_request.guest_token.scans.all %}
+{% if guest_request.guest_token and guest_request.guest_token.scan_history %}
 <div class="card card-body mt-4">
   <h2 class="h6">Scan history</h2>
   <div class="table-responsive">
@@ -32,7 +32,7 @@
         <tr><th>Scanned by</th><th>When</th></tr>
       </thead>
       <tbody>
-        {% for scan in guest_request.guest_token.scans.all %}
+        {% for scan in guest_request.guest_token.scan_history %}
         <tr><td>{{ scan.scanned_by.full_name }} &lt;{{ scan.scanned_by.email }}&gt;</td><td>{{ scan.scanned_at|localtime|date:'Y-m-d H:i' }} IST</td></tr>
         {% endfor %}
       </tbody>

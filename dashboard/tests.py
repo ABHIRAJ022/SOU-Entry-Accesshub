@@ -4,6 +4,7 @@ from io import BytesIO
 from django.test import TestCase, override_settings
 from django.core import mail
 from django.core.cache import cache
+from django.db import connection
 from django.urls import reverse
 from django.utils import timezone
 from datetime import timedelta
@@ -513,6 +514,27 @@ class TokenScanTests(TestCase):
         self.student = User.objects.create_user(email='student@example.com', password='pw', full_name='Student', role=User.Role.STUDENT, is_active=True, is_approved_by_admin=True)
         token, raw = CampusToken.issue(self.student, duration_minutes=60)
         self.token = token
+
+    def test_guest_request_detail_handles_missing_scan_table(self):
+        guest = GuestTokenRequest.objects.create(
+            name='Visitor Test',
+            gender=GuestTokenRequest.Gender.FEMALE,
+            email='visitor@example.com',
+            mobile='+91 9876543210',
+            purpose='Campus tour',
+            live_photo=b'fake-photo',
+            duration_minutes=60,
+            status=GuestTokenRequest.Status.APPROVED,
+        )
+        token, _ = CampusToken.issue_for_guest(guest)
+        guest.refresh_from_db()
+        self.client.force_login(self.security1)
+        with connection.cursor() as cursor:
+            cursor.execute('DROP TABLE IF EXISTS dashboard_tokenscan')
+        response = self.client.get(reverse('dashboard:guest_request_detail', args=[guest.pk]), secure=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'Scan history')
+        token.refresh_from_db()
 
     def test_same_user_cannot_scan_twice(self):
         # create first scan

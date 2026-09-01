@@ -1,6 +1,7 @@
 from functools import wraps
 import base64
 import json
+import logging
 from decimal import Decimal, InvalidOperation
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -20,6 +21,19 @@ from .models import CampusLocation
 from .notifications import send_account_approved, send_token_created, send_token_expiry_notice
 
 TOKEN_DURATIONS = {30, 60, 120, 180, 240, 300, 360, 420, 480}
+
+
+def _safe_token_scans(token):
+    if token is None:
+        return []
+    try:
+        from .models import TokenScan
+        return list(TokenScan.objects.filter(token=token).select_related('scanned_by').order_by('-scanned_at'))
+    except Exception:
+        logger = logging.getLogger(__name__)
+        logger.warning('TokenScan data unavailable; skipping scan history for token %s', getattr(token, 'public_id', token.pk), exc_info=True)
+        return []
+
 
 def role_required(*roles):
     def decorator(view):
@@ -89,7 +103,10 @@ def token_management(request):
 @role_required(User.Role.ADMIN)
 def token_history(request, user_id):
     user = get_object_or_404(_admin_students(request), pk=user_id)
-    return render(request, 'dashboard/token_history.html', {'student': user, 'tokens': user.campus_tokens.order_by('-created_at'), 'now': timezone.now()})
+    tokens = user.campus_tokens.order_by('-created_at')
+    for token in tokens:
+        token.scan_history = _safe_token_scans(token)
+    return render(request, 'dashboard/token_history.html', {'student': user, 'tokens': tokens, 'now': timezone.now()})
 
 @require_POST
 @role_required(User.Role.ADMIN)
@@ -171,6 +188,7 @@ def guest_request_detail(request, request_id):
             photo = 'data:image/jpeg;base64,' + base64.b64encode(guest.live_photo).decode()
     guest_token_qr = ''
     if guest.guest_token:
+        guest.guest_token.scan_history = _safe_token_scans(guest.guest_token)
         guest_token_qr = qr_data_url(guest.guest_token)
     return render(request, 'dashboard/guest_request_detail.html', {
         'guest_request': guest,

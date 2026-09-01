@@ -7,14 +7,14 @@
 
 {% comment %} Show recent scans per token beneath the table for quick audit access {% endcomment %}
 {% for token in tokens %}
-  {% if token.scans.all %}
+  {% if token.scan_history %}
   <div class="card card-body mt-3">
     <h3 class="h6">Scans for token {{ token.public_id }}</h3>
     <div class="table-responsive">
       <table class="table table-sm align-middle mb-0">
         <thead><tr><th>Scanned by</th><th>When</th></tr></thead>
         <tbody>
-          {% for scan in token.scans.all %}
+          {% for scan in token.scan_history %}
           <tr><td>{{ scan.scanned_by.full_name }} &lt;{{ scan.scanned_by.email }}&gt;</td><td>{{ scan.scanned_at|localtime|date:'Y-m-d H:i' }} IST</td></tr>
           {% endfor %}
         </tbody>
