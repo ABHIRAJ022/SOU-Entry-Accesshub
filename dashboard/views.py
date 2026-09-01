@@ -521,6 +521,7 @@ def validate_token(request):
             'expires_at': token.expires_at.isoformat(),
             'profile_photo': photo_data_url,
             'pdf_url': reverse('dashboard:token_pdf', args=[token.public_id]),
+            'scan_recorded': (not tokenscan_missing),
         })
     except Exception as e:
         import logging
