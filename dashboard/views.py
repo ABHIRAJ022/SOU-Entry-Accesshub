@@ -453,6 +453,14 @@ def validate_token(request):
                     import logging
                     logger = logging.getLogger(__name__)
                     logger.error('TokenScan table missing when validating token: %s', pe)
+                    # Rollback the DB connection to clear the aborted transaction state so
+                    # subsequent DB operations (like token.save) don't fail with
+                    # "current transaction is aborted".
+                    try:
+                        from django.db import connection
+                        connection.rollback()
+                    except Exception:
+                        logger.exception('Failed to rollback DB connection after TokenScan ProgrammingError')
                     tokenscan_missing = True
                     scan_count = 0
             else:
@@ -477,6 +485,12 @@ def validate_token(request):
                     import logging
                     logger = logging.getLogger(__name__)
                     logger.error('Failed to record TokenScan (missing table or DB error): %s', pe)
+                    # Rollback the DB connection to clear an aborted transaction state.
+                    try:
+                        from django.db import connection
+                        connection.rollback()
+                    except Exception:
+                        logger.exception('Failed to rollback DB connection after TokenScan create ProgrammingError')
                     tokenscan_missing = True
 
             # On the first scan, keep used_at/used_by for backward compatibility and auditing
