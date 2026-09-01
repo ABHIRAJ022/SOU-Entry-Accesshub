@@ -157,7 +157,17 @@ def guest_request_detail(request, request_id):
         ),
         pk=request_id,
     )
-    photo = 'data:image/jpeg;base64,' + base64.b64encode(guest.live_photo).decode() if guest.live_photo else ''
+    # Detect guest live photo MIME type to build a correct data URL
+    photo = ''
+    if guest.live_photo:
+        try:
+            from io import BytesIO
+            from PIL import Image
+            image_format = Image.open(BytesIO(guest.live_photo)).format.lower()
+            mime_type = {'jpg': 'jpeg'}.get(image_format, image_format)
+            photo = f'data:image/{mime_type};base64,' + base64.b64encode(guest.live_photo).decode()
+        except Exception:
+            photo = 'data:image/jpeg;base64,' + base64.b64encode(guest.live_photo).decode()
     guest_token_qr = ''
     if guest.guest_token:
         guest_token_qr = qr_data_url(guest.guest_token)
@@ -436,7 +446,20 @@ def validate_token(request):
         is_guest = bool(token.guest_request_id)
         holder = token.guest_request if is_guest else token.user
         profile_photo = holder.live_photo if is_guest else holder.profile_photo
-        
+
+        # Build a correct data URL for the photo by detecting its format (PNG/JPEG/etc.)
+        photo_data_url = ''
+        if profile_photo:
+            try:
+                from io import BytesIO
+                from PIL import Image
+                image_format = Image.open(BytesIO(profile_photo)).format.lower()
+                mime_type = {'jpg': 'jpeg'}.get(image_format, image_format)
+                photo_data_url = f'data:image/{mime_type};base64,' + base64.b64encode(profile_photo).decode()
+            except Exception:
+                # Fallback to JPEG data URL (was previously used)
+                photo_data_url = 'data:image/jpeg;base64,' + base64.b64encode(profile_photo).decode()
+
         return JsonResponse({
             'valid': True,
             'token_id': str(token.public_id),
@@ -453,7 +476,7 @@ def validate_token(request):
             'duration_minutes': token.duration_minutes,
             'created_at': token.created_at.isoformat(),
             'expires_at': token.expires_at.isoformat(),
-            'profile_photo': 'data:image/jpeg;base64,' + base64.b64encode(profile_photo).decode() if profile_photo else '',
+            'profile_photo': photo_data_url,
             'pdf_url': reverse('dashboard:token_pdf', args=[token.public_id]),
         })
     except Exception as e:
