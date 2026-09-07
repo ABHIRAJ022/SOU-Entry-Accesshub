@@ -1050,4 +1050,4 @@ Your Campus Token is a full-stack campus access solution that combines secure au
 
 ## License
 
-This project is intended for academic or institutional deployment and is distributed as a local project repository. Update this section with your project's actual license if needed.
+This project is intended for academic or institutional deployment and is distributed as a local project repository. Update this section with your project's actual license if neededThis project is intended for academic or institutional deployment and is distributed as a local project repository. Update this section with your project's actual license if needed.

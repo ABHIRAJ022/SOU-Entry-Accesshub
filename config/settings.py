@@ -90,6 +90,8 @@ if DATABASE_URL:
         'HOST': database_url.hostname or '',
         'PORT': str(database_url.port or ''),
         'OPTIONS': database_options,
+        'CONN_MAX_AGE': int(os.getenv('DATABASE_CONN_MAX_AGE', '0')),
+        'CONN_HEALTH_CHECKS': True,
     }}
 else:
     DATABASES = {'default': {'ENGINE': 'django.db.backends.sqlite3', 'NAME': BASE_DIR / 'db.sqlite3'}}
