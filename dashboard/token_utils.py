@@ -45,7 +45,18 @@ def token_from_signed_payload(value):
     if not payload:
         return None
     from .models import CampusToken
-    return CampusToken.objects.filter(public_id=payload.get('token_id'), user_id=payload.get('user_id'), guest_request_id=payload.get('guest_request_id')).first()
+    return CampusToken.objects.filter(
+        public_id=payload.get('token_id'),
+        user_id=payload.get('user_id'),
+        guest_request_id=payload.get('guest_request_id'),
+    ).select_related('user__branch', 'guest_request').only(
+        'id', 'public_id', 'user_id', 'guest_request_id', 'token_hash', 'created_at',
+        'expires_at', 'duration_minutes', 'generation', 'revoked_at', 'used_at',
+        'user__full_name', 'user__email', 'user__phone_number', 'user__profile_photo',
+        'user__enrollment_number', 'user__branch_id', 'user__branch__name',
+        'guest_request__name', 'guest_request__email', 'guest_request__mobile',
+        'guest_request__gender', 'guest_request__purpose', 'guest_request__live_photo',
+    ).first()
 
 
 @lru_cache(maxsize=512)

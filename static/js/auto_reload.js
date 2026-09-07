@@ -1,7 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
   const toggle = document.querySelector('[data-auto-reload-toggle]');
   const AUTO_KEY = 'smartcampus_auto_reload';
-  const RELOAD_INTERVAL_MS = 5000; // 5 seconds
+  const RELOAD_INTERVAL_MS = 30000; // Avoid repeatedly re-fetching database-backed dashboards.
   const isDashboardPath = () => location.pathname.startsWith('/dashboard');
 
   if (!toggle) return;
@@ -23,12 +23,8 @@ document.addEventListener('DOMContentLoaded', () => {
     stop();
     if (!enabled) return;
     if (!isDashboardPath()) return;
-    // Use fetch-first to warm cache / validate page then reload to show any changes.
     intervalId = setInterval(() => {
-      // Do a GET to ensure the server is reachable and the page has updates.
-      fetch(window.location.href, { method: 'GET', cache: 'no-store', credentials: 'same-origin', headers: { 'Accept': 'text/html' } })
-        .then(() => { window.location.reload(); })
-        .catch(() => { /* ignore network errors and try again next tick */ });
+      window.location.reload();
     }, RELOAD_INTERVAL_MS);
   };
 

@@ -20,5 +20,5 @@
   </div>
 </div>
 {% endif %}
-</td><td>{{ guest.mobile }}</td><td>{{ guest.purpose }}</td><td>{{ guest.created_at|date:'M j, Y, g:i A' }}</td><td>{{ guest.get_status_display }}</td></tr>{% empty %}<tr><td colspan="5" class="text-secondary">No guest access requests yet.</td></tr>{% endfor %}</tbody></table></div></div>
+</td><td>{{ guest.mobile }}</td><td>{{ guest.purpose }}</td><td>{{ guest.created_at|date:'M j, Y, g:i A' }}</td><td>{{ guest.get_status_display }}</td></tr>{% empty %}<tr><td colspan="5" class="text-secondary">No guest access requests yet.</td></tr>{% endfor %}</tbody></table></div>{% if guest_requests.has_other_pages %}<nav class="mt-3">{% if guest_requests.has_previous %}<a href="?page={{ guest_requests.previous_page_number }}">Previous</a>{% endif %} <span>Page {{ guest_requests.number }} of {{ guest_requests.paginator.num_pages }}</span>{% if guest_requests.has_next %}<a href="?page={{ guest_requests.next_page_number }}">Next</a>{% endif %}</nav>{% endif %}</div>
 {% endblock %}

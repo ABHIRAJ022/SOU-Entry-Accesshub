@@ -9,6 +9,7 @@ from django.db import connection, transaction
 from django.db.utils import ProgrammingError
 from django.db.models import Prefetch, Q
 from django.http import HttpResponse, JsonResponse
+from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -28,7 +29,10 @@ def _safe_token_scans(token):
         return []
     try:
         from .models import TokenScan
-        return list(TokenScan.objects.filter(token=token).select_related('scanned_by').order_by('-scanned_at'))
+        return list(TokenScan.objects.filter(token=token).select_related('scanned_by').only(
+            'id', 'token_id', 'scanned_at', 'scanned_by_id',
+            'scanned_by__full_name', 'scanned_by__email',
+        ).order_by('-scanned_at')[:50])
     except Exception:
         logger = logging.getLogger(__name__)
         logger.warning('TokenScan data unavailable; skipping scan history for token %s', getattr(token, 'public_id', token.pk), exc_info=True)
@@ -61,9 +65,14 @@ def home(request):
     if request.user.role == User.Role.SECURITY: return security_dashboard(request)
     now = timezone.now()
     request.user.campus_tokens.filter(revoked_at__isnull=True, expires_at__lte=now).update(revoked_at=now)
-    tokens = request.user.campus_tokens.order_by('-created_at')
-    active_token = tokens.filter(revoked_at__isnull=True, expires_at__gt=now).first()
-    latest_token = tokens.first()
+    token_history = list(request.user.campus_tokens.only(
+        'id', 'public_id', 'created_at', 'expires_at', 'generation', 'revoked_at', 'used_at',
+    ).order_by('-created_at')[:20])
+    latest_token = token_history[0] if token_history else None
+    active_token = next((
+        token for token in token_history
+        if token.revoked_at is None and token.expires_at > now
+    ), None)
     return render(request, 'dashboard/student.html', {
         'student': request.user,
         'email_verified': request.user.is_email_verified,
@@ -72,20 +81,30 @@ def home(request):
         'active_token_qr': qr_data_url(active_token) if active_token else '',
         'latest_token': latest_token,
         'latest_token_qr': qr_data_url(latest_token) if latest_token else '',
-        'token_history': tokens[:20],
+        'token_history': token_history,
     })
 
 @role_required(User.Role.ADMIN)
 def admin_dashboard(request):
-    students = User.objects.filter(role=User.Role.STUDENT)
+    students = User.objects.filter(role=User.Role.STUDENT).select_related('branch').only(
+        'id', 'full_name', 'email', 'role', 'branch_id', 'is_active', 'is_approved_by_admin',
+        'branch__code',
+    )
     if not request.user.is_superuser:
         students = students.filter(branch=request.user.branch)
     staff_approvals = User.objects.none()
     if request.user.is_superuser:
-        staff_approvals = User.objects.filter(role__in=(User.Role.ADMIN, User.Role.SECURITY), is_superuser=False)
+        staff_approvals = User.objects.filter(
+            role__in=(User.Role.ADMIN, User.Role.SECURITY), is_superuser=False,
+        ).select_related('branch').only(
+            'id', 'full_name', 'email', 'role', 'branch_id', 'is_active', 'is_approved_by_super_admin',
+            'branch__code',
+        )
+    students_page = Paginator(students.order_by('full_name'), 50).get_page(request.GET.get('students_page'))
+    staff_page = Paginator(staff_approvals.order_by('full_name'), 50).get_page(request.GET.get('staff_page'))
     return render(request, 'dashboard/admin.html', {
-        'students': students,
-        'staff_approvals': staff_approvals,
+        'students': students_page,
+        'staff_approvals': staff_page,
         'is_super_admin': request.user.is_superuser,
         'branch': request.user.branch,
         'total_students': students.count(),
@@ -104,16 +123,27 @@ def token_management(request):
     scope = Q(user__in=_admin_students(request))
     if request.user.is_superuser:
         scope |= Q(guest_request__isnull=False)
-    tokens = CampusToken.objects.filter(scope).select_related('user', 'user__branch', 'guest_request').order_by('-created_at')
+    tokens = CampusToken.objects.filter(scope).select_related('user', 'guest_request').only(
+        'id', 'public_id', 'user_id', 'guest_request_id', 'created_at', 'expires_at', 'revoked_at', 'used_at',
+        'user__full_name', 'user__email', 'guest_request__name', 'guest_request__mobile',
+    ).order_by('-created_at')
     live_tokens = tokens.filter(revoked_at__isnull=True, used_at__isnull=True, expires_at__gt=now)
     expired_tokens = tokens.exclude(pk__in=live_tokens.values('pk'))
-    return render(request, 'dashboard/tokens.html', {'live_tokens': live_tokens, 'expired_tokens': expired_tokens, 'live_count': live_tokens.count(), 'expired_count': expired_tokens.count(), 'now': now})
+    return render(request, 'dashboard/tokens.html', {
+        'live_tokens': Paginator(live_tokens, 50).get_page(request.GET.get('live_page')),
+        'expired_tokens': Paginator(expired_tokens, 50).get_page(request.GET.get('expired_page')),
+        'live_count': live_tokens.count(),
+        'expired_count': expired_tokens.count(),
+        'now': now,
+    })
 
 @require_GET
 @role_required(User.Role.ADMIN)
 def token_history(request, user_id):
     user = get_object_or_404(_admin_students(request), pk=user_id)
-    tokens = user.campus_tokens.order_by('-created_at')
+    tokens = Paginator(user.campus_tokens.only(
+        'id', 'public_id', 'created_at', 'expires_at', 'generation', 'revoked_at', 'used_at',
+    ).order_by('-created_at'), 50).get_page(request.GET.get('page'))
     for token in tokens:
         token.scan_history = _safe_token_scans(token)
     return render(request, 'dashboard/token_history.html', {'student': user, 'tokens': tokens, 'now': timezone.now()})
@@ -139,7 +169,10 @@ def cancel_token(request, token_id):
 
 @role_required(User.Role.SECURITY)
 def security_dashboard(request):
-    return render(request, 'dashboard/security.html', {'guest_requests': GuestTokenRequest.objects.filter(status=GuestTokenRequest.Status.PENDING).order_by('-created_at')})
+    guest_requests = Paginator(GuestTokenRequest.objects.filter(
+        status=GuestTokenRequest.Status.PENDING,
+    ).only('id', 'name', 'purpose', 'created_at').order_by('-created_at'), 25).get_page(request.GET.get('page'))
+    return render(request, 'dashboard/security.html', {'guest_requests': guest_requests})
 
 
 def _guest_staff_required(view):
@@ -166,14 +199,23 @@ def _token_viewer_required(view):
 @_guest_staff_required
 def guest_requests(request):
     requests = GuestTokenRequest.objects.select_related('approved_by').prefetch_related(
-        Prefetch('token', to_attr='guest_token')
+        Prefetch('token', queryset=CampusToken.objects.only(
+            'id', 'public_id', 'expires_at', 'guest_request_id', 'revoked_at',
+        ), to_attr='guest_token')
+    ).defer('live_photo').only(
+        'id', 'name', 'email', 'mobile', 'purpose', 'status', 'created_at', 'approved_by_id',
+        'approved_by__full_name',
     ).order_by('-created_at')
+    requests = Paginator(requests, 50).get_page(request.GET.get('page'))
     for guest in requests:
         if guest.status == GuestTokenRequest.Status.APPROVED and guest.guest_token:
             guest.token_qr = qr_data_url(guest.guest_token)
         else:
             guest.token_qr = ''
-    return render(request, 'dashboard/guest_requests.html', {'guest_requests': requests, 'pending_count': requests.filter(status=GuestTokenRequest.Status.PENDING).count()})
+    return render(request, 'dashboard/guest_requests.html', {
+        'guest_requests': requests,
+        'pending_count': GuestTokenRequest.objects.filter(status=GuestTokenRequest.Status.PENDING).count(),
+    })
 
 
 @require_GET
@@ -306,7 +348,10 @@ def regenerate_token(request):
 @require_GET
 @_token_viewer_required
 def token_status(request, token_id):
-    tokens = CampusToken.objects.filter(public_id=token_id)
+    tokens = CampusToken.objects.filter(public_id=token_id).only(
+        'id', 'public_id', 'user_id', 'guest_request_id', 'expires_at', 'revoked_at',
+        'used_at',
+    )
     if request.user.role == User.Role.STUDENT:
         tokens = tokens.filter(user=request.user)
     else:
@@ -326,12 +371,21 @@ def token_status(request, token_id):
 @require_GET
 @_token_viewer_required
 def token_pdf(request, token_id):
-    tokens = CampusToken.objects.filter(public_id=token_id)
+    tokens = CampusToken.objects.filter(public_id=token_id).select_related(
+        'user', 'guest_request', 'audit',
+    ).only(
+        'id', 'public_id', 'user_id', 'guest_request_id', 'token_hash', 'created_at',
+        'expires_at', 'duration_minutes', 'generation', 'revoked_at', 'used_at',
+        'user__full_name', 'user__email', 'user__phone_number', 'user__profile_photo',
+        'user__branch_id', 'user__branch__name',
+        'guest_request__name', 'guest_request__email', 'guest_request__mobile',
+        'guest_request__live_photo', 'audit__snapshot',
+    )
     if request.user.role == User.Role.STUDENT:
         tokens = tokens.filter(user=request.user)
     else:
         tokens = tokens.filter(guest_request__isnull=False)
-    token = tokens.select_related('user__branch', 'guest_request', 'audit').first()
+    token = tokens.select_related('user__branch').first()
     if not token:
         return JsonResponse({'error': 'Token not found.'}, status=404)
     token.mark_expired()
@@ -364,7 +418,15 @@ def campus_map(request):
 @require_GET
 @role_required(User.Role.ADMIN, User.Role.SECURITY, User.Role.STUDENT)
 def locations_api(request):
-    return JsonResponse({'locations': [_location_data(location) for location in CampusLocation.objects.filter(is_active=True).order_by('name')]})
+    locations = CampusLocation.objects.filter(is_active=True).order_by('name').values(
+        'id', 'name', 'category', 'latitude', 'longitude', 'description', 'building_code', 'is_active',
+    )[:200]
+    return JsonResponse({'locations': [{
+        **location,
+        'latitude': float(location['latitude']),
+        'longitude': float(location['longitude']),
+        'category_label': dict(CampusLocation.Category.choices)[location['category']],
+    } for location in locations]})
 
 
 @require_POST
