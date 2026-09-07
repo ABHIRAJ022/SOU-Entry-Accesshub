@@ -5,7 +5,9 @@ from django.db import connection
 from django.test import Client, RequestFactory, TestCase, override_settings
 from django.urls import reverse
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db.utils import OperationalError
 from io import BytesIO
+from unittest.mock import patch
 from PIL import Image
 from .admin import AccountUserAdmin, AccountUserAdminForm
 from .models import Branch, EmailOTP, User
@@ -77,6 +79,16 @@ class AuthenticationContractTests(TestCase):
         )
         self.assertEqual(response.status_code, 403)
         self.assertContains(response, 'Reload secure form', status_code=403)
+
+    @patch('accounts.forms.authenticate', side_effect=OperationalError)
+    def test_login_handles_database_outage(self, authenticate_mock):
+        response = self.client.post(
+            reverse('accounts:login'),
+            {'role': User.Role.STUDENT, 'username': self.user.email, 'password': 'StrongPassword123!'},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Sign-in is temporarily unavailable')
+        authenticate_mock.assert_called_once()
 
     def test_form_pages_issue_csrf_cookie(self):
         for url_name in ('accounts:login', 'accounts:register', 'accounts:verify_otp'):

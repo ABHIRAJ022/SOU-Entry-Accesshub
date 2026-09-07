@@ -1,13 +1,16 @@
 import re
+import logging
 from bleach import clean
 from django import forms
 from django.contrib.auth import authenticate
 from django.contrib.auth.forms import AuthenticationForm
 from django.core.exceptions import ValidationError
+from django.db.utils import OperationalError
 from .models import Branch, User
 from dashboard.models import GuestTokenRequest
 
 EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+logger = logging.getLogger(__name__)
 
 def sanitized(value):
     return clean(value or '', tags=[], attributes={}, strip=True).strip()
@@ -64,7 +67,11 @@ class SecureLoginForm(AuthenticationForm):
         email = sanitized(self.cleaned_data.get('username')).lower(); password = self.cleaned_data.get('password')
         selected_role = self.cleaned_data.get('role')
         if email and password:
-            self.user_cache = authenticate(self.request, username=email, password=password)
+            try:
+                self.user_cache = authenticate(self.request, username=email, password=password)
+            except OperationalError:
+                logger.exception('Database unavailable during login authentication')
+                raise ValidationError('Sign-in is temporarily unavailable. Please try again shortly.')
             if self.user_cache is None: raise ValidationError('Invalid email or password.')
             if not self.user_cache.is_active: raise ValidationError('This account is inactive.')
             if self.user_cache.role != selected_role: raise ValidationError('The selected account type does not match this account.')
