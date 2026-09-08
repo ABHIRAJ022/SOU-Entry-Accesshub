@@ -9,10 +9,7 @@ from .models import Branch, EmailOTP, User
 
 
 def _token_scan_table_available():
-    try:
-        return 'dashboard_tokenscan' in connection.introspection.table_names()
-    except Exception:
-        return False
+    return True
 
 class AccountUserAdminForm(forms.ModelForm):
     profile_photo = forms.ImageField(required=False, label='Profile photo')

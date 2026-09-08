@@ -5,8 +5,7 @@ import logging
 from decimal import Decimal, InvalidOperation
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.db import connection
-from django.db.utils import ProgrammingError
+from django.db import DatabaseError
 from django.db.models import Q
 from django.http import HttpResponse, JsonResponse
 from django.core.paginator import Paginator
@@ -37,16 +36,6 @@ def _safe_token_scans(token):
         logger = logging.getLogger(__name__)
         logger.warning('TokenScan data unavailable; skipping scan history for token %s', getattr(token, 'public_id', token.pk), exc_info=True)
         return []
-
-
-def _token_scan_table_available():
-    try:
-        tables = set(connection.introspection.table_names())
-        return 'dashboard_tokenscan' in tables
-    except Exception:
-        logger = logging.getLogger(__name__)
-        logger.warning('Unable to inspect database tables for TokenScan availability.', exc_info=True)
-        return False
 
 
 def role_required(*roles):
@@ -386,7 +375,7 @@ def token_pdf(request, token_id):
 
 
 def _location_data(location):
-    return {'id': location.id, 'name': location.name, 'category': location.category, 'category_label': location.get_category_display(), 'latitude': float(location.latitude), 'longitude': float(location.longitude), 'description': location.description, 'building_code': location.building_code, 'is_active': location.is_active}
+    return {'id': str(location.id), 'name': location.name, 'category': location.category, 'category_label': location.get_category_display(), 'latitude': float(location.latitude), 'longitude': float(location.longitude), 'description': location.description, 'building_code': location.building_code, 'is_active': location.is_active}
 
 
 def _coordinates(payload):
@@ -413,7 +402,7 @@ def locations_api(request):
         'id', 'name', 'category', 'latitude', 'longitude', 'description', 'building_code', 'is_active',
     )[:200]
     return JsonResponse({'locations': [{
-        **location,
+        **{**location, 'id': str(location['id'])},
         'latitude': float(location['latitude']),
         'longitude': float(location['longitude']),
         'category_label': dict(CampusLocation.Category.choices)[location['category']],
@@ -500,20 +489,8 @@ def validate_token(request):
                 return JsonResponse({'valid': False, 'error': f'Guest request status: {status}. Not approved.'}, status=400)
             return JsonResponse({'valid': False, 'error': 'Invalid token or student not approved.'}, status=400)
         
-        # Validate token state
-        tokenscan_missing = False
-        TokenScan = None
-        try:
-            from .models import TokenScan as _TokenScan
-            TokenScan = _TokenScan
-            if not _token_scan_table_available():
-                tokenscan_missing = True
-                logger = logging.getLogger(__name__)
-                logger.warning('TokenScan table missing when validating token; continuing without scan tracking.')
-        except Exception as exc:
-            logger = logging.getLogger(__name__)
-            logger.warning('TokenScan model unavailable during validation; continuing without scan tracking: %s', exc)
-            tokenscan_missing = True
+        # Validate token state and enforce the per-token scan limit in MongoDB.
+        from .models import TokenScan
 
         token = CampusToken.objects.filter(pk=token.pk).first()
 
@@ -529,31 +506,26 @@ def validate_token(request):
                 return JsonResponse({'valid': False, 'error': 'Token has expired.'}, status=409)
 
             # Allow up to 3 distinct scans per token. Prevent the same security user from scanning the same token more than once.
-            scan_count = 0
-            if not tokenscan_missing and TokenScan is not None:
-                try:
-                    scan_count = TokenScan.objects.filter(token=token).count()
-                except ProgrammingError as pe:
-                    logger = logging.getLogger(__name__)
-                    logger.warning('TokenScan table missing during token validation; proceeding without scan checks: %s', pe)
-                    tokenscan_missing = True
-                    scan_count = 0
+            tokenscan_missing = False
+            try:
+                scan_count = TokenScan.objects.filter(token=token).count()
+            except DatabaseError:
+                logging.getLogger(__name__).warning('TokenScan data unavailable; continuing without recording this scan.', exc_info=True)
+                tokenscan_missing = True
+                scan_count = 0
 
             if not tokenscan_missing and scan_count >= 3:
                 # Token has reached maximum allowed scans
                 return JsonResponse({'valid': False, 'error': 'Token has already been used.'}, status=409)
 
-            if not tokenscan_missing and TokenScan is not None:
-                # Prevent same security staff scanning the same token multiple times
+            # Prevent the same security staff from scanning a token twice.
+            if not tokenscan_missing and TokenScan.objects.filter(token=token, scanned_by=request.user).exists():
+                return JsonResponse({'valid': False, 'error': 'You have already scanned this token.'}, status=409)
+            if not tokenscan_missing:
                 try:
-                    if TokenScan.objects.filter(token=token, scanned_by=request.user).exists():
-                        return JsonResponse({'valid': False, 'error': 'You have already scanned this token.'}, status=409)
-
-                    # Record this scan
                     TokenScan.objects.create(token=token, scanned_by=request.user)
-                except ProgrammingError as pe:
-                    logger = logging.getLogger(__name__)
-                    logger.warning('TokenScan record unavailable; continuing without scan tracking: %s', pe)
+                except DatabaseError:
+                    logging.getLogger(__name__).warning('TokenScan could not be saved; continuing without recording this scan.', exc_info=True)
                     tokenscan_missing = True
 
             # On the first scan, keep used_at/used_by for backward compatibility and auditing
@@ -598,7 +570,7 @@ def validate_token(request):
             'expires_at': token.expires_at.isoformat(),
             'profile_photo': photo_data_url,
             'pdf_url': reverse('dashboard:token_pdf', args=[token.public_id]),
-            'scan_recorded': (not tokenscan_missing),
+            'scan_recorded': not tokenscan_missing,
         })
     except Exception as e:
         logger = logging.getLogger(__name__)

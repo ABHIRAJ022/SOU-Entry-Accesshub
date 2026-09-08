@@ -8,10 +8,7 @@ from .models import CampusLocation, CampusToken, GuestTokenRequest, TokenAudit, 
 
 
 def _token_scan_table_available():
-    try:
-        return 'dashboard_tokenscan' in connection.introspection.table_names()
-    except Exception:
-        return False
+    return True
 
 
 @admin.register(CampusLocation)

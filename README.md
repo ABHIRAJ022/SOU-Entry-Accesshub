@@ -52,8 +52,8 @@ Result: 62 tests ran and all passed.
 
 ### Data and storage
 
-- SQLite by default for local development (`config/settings_local.py`)
-- MongoDB Atlas support through `MONGODB_URI` in production (`config/settings.py`)
+- MongoDB for local development and production through `MONGODB_URI`
+- MongoDB Atlas is recommended for deployed environments
 - `django-mongodb-backend==5.1.0b4` provides the Django 5.1-compatible MongoDB backend
 - `Pillow` for image verification and profile photo processing
 - `cloudinary_storage` and `Cloudinary` support for media storage when `CLOUDINARY_URL` is configured
@@ -231,7 +231,6 @@ Your-Campus-Token/
 │   │   └── tokens.html
 │   └── socialaccount/
 ├── build_files.sh
-├── db.sqlite3
 ├── manage.py
 ├── requirements.txt
 ├── vercel.json
@@ -347,7 +346,7 @@ Files and responsibilities:
 | File | Responsibility |
 | --- | --- |
 | `config/settings.py` | Main settings: environment loading, security, auth backends, middleware, database config, email config, static/media config, CORS and CSP, Google auth, and production enforcement. |
-| `config/settings_local.py` | Local SQLite/dev settings with console email backend. |
+| `config/settings_local.py` | Local MongoDB settings with console email backend. |
 | `config/urls.py` | Top-level URL includes for accounts, dashboard, admin, health endpoint, and Google auth routes. |
 | `config/asgi.py` | ASGI app wiring. |
 | `config/wsgi.py` | WSGI app wiring for Vercel and general deployment. |
@@ -371,11 +370,14 @@ Files and responsibilities:
 
 ### 7.2 Database configuration
 
-`config/settings.py` chooses the database as follows:
+`config/settings.py` and `config/settings_local.py` require `MONGODB_URI` and connect through
+`django_mongodb_backend`. The application does not configure a PostgreSQL or SQLite fallback.
+Set the database name in the URI, for example:
 
-- If `MONGODB_URI` is present, Django connects through `django_mongodb_backend` and uses MongoDB collections.
-- If no `MONGODB_URI` is set, local settings fall back to SQLite at `db.sqlite3`.
-- Local dev config in `config/settings_local.py` keeps the SQLite fallback and console email backend.
+```text
+mongodb://localhost:27017/your_campus_token
+mongodb+srv://user:password@cluster.mongodb.net/your_campus_token?retryWrites=true&w=majority
+```
 
 ### 7.3 Migrations
 
@@ -391,7 +393,7 @@ Migrations are present under `accounts/migrations`, `dashboard/migrations`, `bio
 
 The application enforces several integrity rules in Python and the database:
 
-- `CampusToken` has a check constraint guaranteeing exactly one owner: either a `user` or a `guest_request`.
+- `CampusToken` validates exactly one owner in application code because MongoDB does not enforce Django SQL check constraints.
 - `CampusToken.issue()` rejects a second active token for the same user.
 - `CampusToken.DAILY_LIMIT = 3` limits generation to three tokens per day.
 - `GuestTokenRequest` prevents a second active token request for the same mobile number while the previous one remains valid.
@@ -750,7 +752,7 @@ Fan-out of the actual environment variables found in the repo:
 | `DJANGO_SITE_URL` | `config/settings.py` | Base URL for SEO and canonical metadata | No | `https://example.com` |
 | `DJANGO_CSRF_TRUSTED_ORIGINS` | `config/settings.py` | Trusted origins for CSRF | No | `https://example.com` |
 | `DJANGO_SECURE_SSL_REDIRECT` | `config/settings.py` | Force HTTPS redirect | No | `True` |
-| `MONGODB_URI` | `config/settings.py` | MongoDB connection URI | Required in production | `mongodb+srv://user:password@cluster.mongodb.net/your_campus_token` |
+| `MONGODB_URI` | `config/settings.py`, `config/settings_local.py` | MongoDB connection URI | Required in every environment | `mongodb+srv://user:password@cluster.mongodb.net/your_campus_token` |
 | `EMAIL_HOST` | `config/settings.py` | SMTP host | No | `smtp.gmail.com` |
 | `EMAIL_PORT` | `config/settings.py` | SMTP port | No | `587` |
 | `EMAIL_HOST_USER` | `config/settings.py` | SMTP username | No | `alerts@example.com` |

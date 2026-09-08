@@ -22,7 +22,7 @@ class IdentityVerificationTests(TestCase):
         from django.contrib.auth.hashers import make_password
         # Create an email OTP for tests instead of a security PIN
         from accounts.models import EmailOTP
-        EmailOTP.objects.create(user=self.user, code_hash=make_password('123456'))
+        EmailOTP.objects.create(user=self.user, code_hash=make_password('1234'))
         self.user.save(update_fields=['is_email_verified', 'is_approved_by_admin'])
         self.client.force_login(self.user)
 
@@ -32,7 +32,7 @@ class IdentityVerificationTests(TestCase):
         return f"data:image/jpeg;base64,{base64.b64encode(output.getvalue()).decode()}"
 
     def _payload(self):
-        return {'capture_mode': 'webcam', 'capture_id': self.client.session['identity_capture_id'], 'captured_at': time.time(), 'image': self._image(), 'otp': '123456'}
+        return {'capture_mode': 'webcam', 'capture_id': self.client.session['identity_capture_id'], 'captured_at': time.time(), 'image': self._image(), 'otp': '1234'}
 
     def _start(self):
         self.client.get(reverse('biometrics:verify_page'), secure=True)
@@ -59,7 +59,6 @@ class IdentityVerificationTests(TestCase):
         self._start()
         self.client.post(reverse('biometrics:request_emergency_otp'), secure=True)
         payload = self._payload()
-        payload.pop('pin')
         payload['otp'] = '1234'
         response = self.client.post(reverse('biometrics:verify_identity'), payload, content_type='application/json', secure=True)
         self.assertEqual(response.status_code, 200)

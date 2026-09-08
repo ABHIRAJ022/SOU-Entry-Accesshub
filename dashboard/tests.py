@@ -5,15 +5,16 @@ from django.test import TestCase, RequestFactory, override_settings
 from django.contrib import admin
 from django.core import mail
 from django.core.cache import cache
-from django.db import connection
+from django.db.utils import OperationalError
 from django.urls import reverse
 from django.utils import timezone
 from datetime import timedelta
+from unittest.mock import patch
 from PIL import Image
 from accounts.models import Branch, User
 from biometrics.models import IdentityVerification
 from .admin import CampusTokenAdmin
-from .models import CampusLocation, CampusToken, GuestTokenRequest, TokenNotification
+from .models import CampusLocation, CampusToken, GuestTokenRequest, TokenNotification, TokenScan
 from .token_utils import qr_data_url, signed_payload
 from .token_utils import signed_payload, verify_signed_payload
 from .notifications import send_token_created
@@ -34,7 +35,7 @@ class StudentDashboardTests(TestCase):
     def _set_identity_verification(self, user):
         verification = IdentityVerification.objects.create(user=user, audit_snapshot=b'audit', snapshot_size=5, verification_method='pin', expires_at=timezone.now() + timedelta(minutes=5))
         session = self.client.session
-        session['identity_verification_id'] = verification.pk
+        session['identity_verification_id'] = str(verification.pk)
         session['identity_verified_at'] = timezone.now().timestamp()
         session.save()
 
@@ -293,9 +294,8 @@ class StudentDashboardTests(TestCase):
         token, _ = CampusToken.issue(student, 60)
         security = User.objects.create_user(email='scan-missing-security@example.com', password='StrongPassword123!', full_name='Scan Missing Security', role=User.Role.SECURITY)
         self.client.force_login(security)
-        with connection.cursor() as cursor:
-            cursor.execute('DROP TABLE IF EXISTS dashboard_tokenscan')
-        response = self.client.post(reverse('validate_token'), {'qr_payload': signed_payload(token)}, content_type='application/json', secure=True)
+        with patch.object(TokenScan.objects, 'filter', side_effect=OperationalError):
+            response = self.client.post(reverse('validate_token'), {'qr_payload': signed_payload(token)}, content_type='application/json', secure=True)
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json()['valid'])
         self.assertFalse(response.json()['scan_recorded'])
@@ -464,7 +464,7 @@ class StudentDashboardTests(TestCase):
         self.client.force_login(student)
         verification = IdentityVerification.objects.create(user=student, audit_snapshot=b'audit', snapshot_size=5, verification_method='pin', expires_at=timezone.now() + timedelta(minutes=5))
         session = self.client.session
-        session['identity_verification_id'] = verification.pk
+        session['identity_verification_id'] = str(verification.pk)
         session['identity_verified_at'] = timezone.now().timestamp()
         session.save()
         token = self.client.post(reverse('dashboard:issue_token'), self._token_payload(), content_type='application/json', secure=True).json()
@@ -547,9 +547,8 @@ class TokenScanTests(TestCase):
         token, _ = CampusToken.issue_for_guest(guest)
         guest.refresh_from_db()
         self.client.force_login(self.security1)
-        with connection.cursor() as cursor:
-            cursor.execute('DROP TABLE IF EXISTS dashboard_tokenscan')
-        response = self.client.get(reverse('dashboard:guest_request_detail', args=[guest.pk]), secure=True)
+        with patch.object(TokenScan.objects, 'filter', side_effect=OperationalError):
+            response = self.client.get(reverse('dashboard:guest_request_detail', args=[guest.pk]), secure=True)
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'Scan history')
         token.refresh_from_db()
@@ -558,14 +557,13 @@ class TokenScanTests(TestCase):
         admin_user = User.objects.create_superuser(email='admin-campus-token@example.com', password='StrongPassword123!', full_name='Campus Admin')
         student = User.objects.create_user(email='campus-token-student@example.com', password='StrongPassword123!', full_name='Campus Token Student', role=User.Role.STUDENT, is_active=True, is_approved_by_admin=True)
         token, _ = CampusToken.issue(student, duration_minutes=60)
-        with connection.cursor() as cursor:
-            cursor.execute('DROP TABLE IF EXISTS dashboard_tokenscan')
         request = RequestFactory().get('/admin/dashboard/campustoken/')
         request.user = admin_user
         admin_obj = CampusTokenAdmin(CampusToken, admin.site)
-        self.assertEqual(admin_obj.get_deleted_objects([token], request)[1]['dashboard.CampusToken'], 1)
-        admin_obj.delete_queryset(request, CampusToken.objects.filter(pk=token.pk))
-        self.assertTrue(CampusToken.objects.filter(pk=token.pk).exists())
+        with patch('dashboard.admin._token_scan_table_available', return_value=False):
+            self.assertEqual(admin_obj.get_deleted_objects([token], request)[1]['dashboard.CampusToken'], 1)
+            admin_obj.delete_queryset(request, CampusToken.objects.filter(pk=token.pk))
+            self.assertTrue(CampusToken.objects.filter(pk=token.pk).exists())
 
     def test_guest_request_admin_delete_handles_missing_tokenscan_table(self):
         admin_user = User.objects.create_superuser(email='admin-guest-request@example.com', password='StrongPassword123!', full_name='Guest Request Admin')
@@ -578,14 +576,13 @@ class TokenScanTests(TestCase):
             live_photo=b'photo',
             duration_minutes=60,
         )
-        with connection.cursor() as cursor:
-            cursor.execute('DROP TABLE IF EXISTS dashboard_tokenscan')
         request = RequestFactory().get('/admin/dashboard/guesttokenrequest/')
         request.user = admin_user
         admin_obj = admin.site._registry[GuestTokenRequest]
-        self.assertEqual(admin_obj.get_deleted_objects([guest], request)[1]['dashboard.GuestTokenRequest'], 1)
-        admin_obj.delete_queryset(request, GuestTokenRequest.objects.filter(pk=guest.pk))
-        self.assertTrue(GuestTokenRequest.objects.filter(pk=guest.pk).exists())
+        with patch('dashboard.admin._token_scan_table_available', return_value=False):
+            self.assertEqual(admin_obj.get_deleted_objects([guest], request)[1]['dashboard.GuestTokenRequest'], 1)
+            admin_obj.delete_queryset(request, GuestTokenRequest.objects.filter(pk=guest.pk))
+            self.assertTrue(GuestTokenRequest.objects.filter(pk=guest.pk).exists())
 
     def test_same_user_cannot_scan_twice(self):
         # create first scan

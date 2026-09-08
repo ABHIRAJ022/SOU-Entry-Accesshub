@@ -146,9 +146,9 @@ def verify_identity(request):
             return _error('Enter the four-digit emergency code sent to your email or request one.')
         if not verified:
             return _error('Identity verification failed. Check your emergency code.')
-        verification = IdentityVerification.objects.create(user=user, audit_snapshot=snapshot, snapshot_size=len(snapshot), verification_method=method, expires_at=timezone.now() + timedelta(seconds=settings.IDENTITY_VERIFICATION_MAX_AGE_SECONDS))
+        verification = IdentityVerification.objects.create(user=user, audit_snapshot=snapshot, snapshot_size=len(snapshot), verification_method='webcam', expires_at=timezone.now() + timedelta(seconds=settings.IDENTITY_VERIFICATION_MAX_AGE_SECONDS))
         request.session['identity_verified'] = True
-        request.session['identity_verification_id'] = verification.pk
+        request.session['identity_verification_id'] = str(verification.pk)
         request.session['identity_verified_at'] = timezone.now().timestamp()
         request.session.pop('identity_capture_id', None)
         return JsonResponse({'verified': True, 'expires_in': settings.IDENTITY_VERIFICATION_MAX_AGE_SECONDS})

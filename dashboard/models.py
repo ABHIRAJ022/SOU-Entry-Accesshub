@@ -1,7 +1,7 @@
 import hashlib
 import secrets
 import uuid
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
@@ -23,8 +23,15 @@ class CampusToken(models.Model):
     used_at = models.DateTimeField(null=True, blank=True)
     used_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='validated_tokens')
 
-    class Meta:
-        constraints = [models.CheckConstraint(condition=(models.Q(user__isnull=False, guest_request__isnull=True) | models.Q(user__isnull=True, guest_request__isnull=False)), name='token_has_exactly_one_owner')]
+    def clean(self):
+        from django.core.exceptions import ValidationError
+
+        if (self.user_id is None) == (self.guest_request_id is None):
+            raise ValidationError('A campus token must have exactly one owner.')
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        return super().save(*args, **kwargs)
 
     @classmethod
     def issue(cls, user, duration_minutes=60):
@@ -33,7 +40,10 @@ class CampusToken(models.Model):
         latest = cls.objects.filter(user=user).order_by('-generation').first()
         generation = (latest.generation + 1) if latest else 1
         now = timezone.now()
-        if cls.objects.filter(user=user, created_at__date=timezone.localdate()).count() >= cls.DAILY_LIMIT:
+        local_day = timezone.localdate()
+        day_start = timezone.make_aware(datetime.combine(local_day, time.min))
+        day_end = day_start + timedelta(days=1)
+        if cls.objects.filter(user=user, created_at__gte=day_start, created_at__lt=day_end).count() >= cls.DAILY_LIMIT:
             raise ValueError('You can generate a maximum of 3 tokens per day.')
         cls.objects.filter(user=user, revoked_at__isnull=True, expires_at__lte=now).update(revoked_at=now)
         if cls.objects.filter(user=user, revoked_at__isnull=True, expires_at__gt=now).exists():

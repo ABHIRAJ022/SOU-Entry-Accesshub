@@ -10,15 +10,6 @@ CSRF_TRUSTED_ORIGINS = [
 	'http://localhost:8001', 'https://localhost:8001',
 	'http://127.0.0.1:8001', 'https://127.0.0.1:8001',
 ]
-_LOCAL_APP_CONFIGS = {
-    'config.apps.MongoAdminConfig': 'django.contrib.admin',
-    'config.apps.MongoAuthConfig': 'django.contrib.auth',
-    'config.apps.MongoContentTypesConfig': 'django.contrib.contenttypes',
-    'config.apps.MongoSitesConfig': 'django.contrib.sites',
-    'config.apps.MongoAccountConfig': 'allauth.account',
-    'config.apps.MongoSocialAccountConfig': 'allauth.socialaccount',
-}
-INSTALLED_APPS = [_LOCAL_APP_CONFIGS.get(app, app) for app in INSTALLED_APPS]
 # If running inside GitHub Codespaces / forwarded app domain, add the forwarding origin so CSRF checks pass
 codespace_name = os.getenv('CODESPACE_NAME')
 codespace_domain = os.getenv('GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN', 'app.github.dev')
@@ -29,14 +20,8 @@ if codespace_name:
         CSRF_TRUSTED_ORIGINS.append(codespace_origin)
 
 MONGODB_URI = os.getenv('MONGODB_URI', '').strip()
-if MONGODB_URI:
-    import django_mongodb_backend
-
-    DATABASES = {'default': django_mongodb_backend.parse_uri(MONGODB_URI)}
-else:
-    DATABASES = {'default': {'ENGINE': 'django.db.backends.sqlite3', 'NAME': BASE_DIR / 'db.sqlite3'}}
-    DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-    SITE_ID = 1
+if not MONGODB_URI:
+    raise RuntimeError('MONGODB_URI must be configured for local development.')
 STORAGES = {
 	**STORAGES,
 	'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},

@@ -70,29 +70,30 @@ TEMPLATES = [{
 WSGI_APPLICATION = 'config.wsgi.application'
 ASGI_APPLICATION = 'config.asgi.application'
 MONGODB_URI = os.getenv('MONGODB_URI', '').strip()
-if MONGODB_URI:
-    import django_mongodb_backend
+if not MONGODB_URI:
+    raise RuntimeError('MONGODB_URI must be configured for every environment.')
 
-    DATABASES = {'default': django_mongodb_backend.parse_uri(MONGODB_URI)}
-elif not DEBUG:
-    raise RuntimeError('MONGODB_URI must be configured when DJANGO_DEBUG=False.')
-else:
-    DATABASES = {'default': {'ENGINE': 'django.db.backends.sqlite3', 'NAME': BASE_DIR / 'db.sqlite3'}}
+import django_mongodb_backend
+from .django_compat import apply_python314_template_compatibility
 
-if MONGODB_URI or env_bool('MONGODB_MIGRATIONS'):
-    MIGRATION_MODULES = {
-        'admin': 'mongo_migrations.admin',
-        'auth': 'mongo_migrations.auth',
-        'contenttypes': 'mongo_migrations.contenttypes',
-        'sessions': 'mongo_migrations.sessions',
-        'sites': 'mongo_migrations.sites',
-        'account': 'mongo_migrations.account',
-        'socialaccount': 'mongo_migrations.socialaccount',
-        'accounts': 'mongo_migrations.accounts',
-        'core': 'mongo_migrations.core',
-        'dashboard': 'mongo_migrations.dashboard',
-        'biometrics': 'mongo_migrations.biometrics',
-    }
+DATABASES = {'default': django_mongodb_backend.parse_uri(MONGODB_URI)}
+# MongoDB has no transaction support, so Django's serialized test-database
+# template is incompatible with the backend. Each test still flushes data.
+DATABASES['default']['TEST'] = {'SERIALIZE': False}
+apply_python314_template_compatibility()
+MIGRATION_MODULES = {
+    'admin': 'mongo_migrations.admin',
+    'auth': 'mongo_migrations.auth',
+    'contenttypes': 'mongo_migrations.contenttypes',
+    'sessions': 'mongo_migrations.sessions',
+    'sites': 'mongo_migrations.sites',
+    'account': 'mongo_migrations.account',
+    'socialaccount': 'mongo_migrations.socialaccount',
+    'accounts': 'mongo_migrations.accounts',
+    'core': 'mongo_migrations.core',
+    'dashboard': 'mongo_migrations.dashboard',
+    'biometrics': 'mongo_migrations.biometrics',
+}
 
 AUTH_USER_MODEL = 'accounts.User'
 AUTHENTICATION_BACKENDS = ['django.contrib.auth.backends.ModelBackend', 'allauth.account.auth_backends.AuthenticationBackend']

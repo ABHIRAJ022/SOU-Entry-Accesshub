@@ -16,8 +16,8 @@ from reportlab.pdfgen import canvas
 def signed_payload(token):
     payload = {
         'token_id': str(token.public_id),
-        'user_id': token.user_id,
-        'guest_request_id': token.guest_request_id,
+        'user_id': str(token.user_id) if token.user_id else None,
+        'guest_request_id': str(token.guest_request_id) if token.guest_request_id else None,
         'generation': token.generation,
         'expires_at': token.expires_at.isoformat(),
     }
