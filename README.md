@@ -53,8 +53,8 @@ Result: 62 tests ran and all passed.
 ### Data and storage
 
 - SQLite by default for local development (`config/settings_local.py`)
-- PostgreSQL support when `DATABASE_URL` is set in production (`config/settings.py`)
-- `dj-database-url` is installed, but the app explicitly validates a PostgreSQL URL when the setting is used
+- MongoDB Atlas support through `MONGODB_URI` in production (`config/settings.py`)
+- `django-mongodb-backend==5.1.0b4` provides the Django 5.1-compatible MongoDB backend
 - `Pillow` for image verification and profile photo processing
 - `cloudinary_storage` and `Cloudinary` support for media storage when `CLOUDINARY_URL` is configured
 - `openpyxl` for Excel report generation in `core/reports.py`
@@ -373,9 +373,9 @@ Files and responsibilities:
 
 `config/settings.py` chooses the database as follows:
 
-- If `DATABASE_URL` is present and uses PostgreSQL, Django connects to PostgreSQL with `ENGINE = 'django.db.backends.postgresql'`.
-- If no `DATABASE_URL` is set, it falls back to SQLite at `db.sqlite3`.
-- Local dev config in `config/settings_local.py` forces SQLite and console email backend.
+- If `MONGODB_URI` is present, Django connects through `django_mongodb_backend` and uses MongoDB collections.
+- If no `MONGODB_URI` is set, local settings fall back to SQLite at `db.sqlite3`.
+- Local dev config in `config/settings_local.py` keeps the SQLite fallback and console email backend.
 
 ### 7.3 Migrations
 
@@ -750,7 +750,7 @@ Fan-out of the actual environment variables found in the repo:
 | `DJANGO_SITE_URL` | `config/settings.py` | Base URL for SEO and canonical metadata | No | `https://example.com` |
 | `DJANGO_CSRF_TRUSTED_ORIGINS` | `config/settings.py` | Trusted origins for CSRF | No | `https://example.com` |
 | `DJANGO_SECURE_SSL_REDIRECT` | `config/settings.py` | Force HTTPS redirect | No | `True` |
-| `DATABASE_URL` | `config/settings.py` | PostgreSQL database URL | Required in production when using Postgres | `postgresql://user:password@host:5432/database?sslmode=require` |
+| `MONGODB_URI` | `config/settings.py` | MongoDB connection URI | Required in production | `mongodb+srv://user:password@cluster.mongodb.net/your_campus_token` |
 | `EMAIL_HOST` | `config/settings.py` | SMTP host | No | `smtp.gmail.com` |
 | `EMAIL_PORT` | `config/settings.py` | SMTP port | No | `587` |
 | `EMAIL_HOST_USER` | `config/settings.py` | SMTP username | No | `alerts@example.com` |

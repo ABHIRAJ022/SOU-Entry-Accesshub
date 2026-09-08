@@ -28,7 +28,7 @@ class CampusToken(models.Model):
 
     @classmethod
     def issue(cls, user, duration_minutes=60):
-        user = User.objects.select_for_update().get(pk=user.pk)
+        user = User.objects.get(pk=user.pk)
         raw_token = secrets.token_urlsafe(32)
         latest = cls.objects.filter(user=user).order_by('-generation').first()
         generation = (latest.generation + 1) if latest else 1

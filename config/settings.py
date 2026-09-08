@@ -1,7 +1,5 @@
 import os
 from pathlib import Path
-from urllib.parse import parse_qs, unquote, urlparse
-
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -44,9 +42,9 @@ if codespace_name:
 CSRF_FAILURE_VIEW = 'core.views.csrf_failure'
 
 INSTALLED_APPS = [
-    'django.contrib.admin', 'django.contrib.auth', 'django.contrib.contenttypes',
+    'config.apps.MongoAdminConfig', 'config.apps.MongoAuthConfig', 'config.apps.MongoContentTypesConfig',
     'django.contrib.sessions', 'django.contrib.messages', 'django.contrib.staticfiles',
-    'django.contrib.sites', 'allauth', 'allauth.account', 'allauth.socialaccount',
+    'config.apps.MongoSitesConfig', 'allauth', 'config.apps.MongoAccountConfig', 'config.apps.MongoSocialAccountConfig',
     'allauth.socialaccount.providers.google', 'rest_framework', 'csp',
     'corsheaders', 'cloudinary_storage', 'accounts', 'core', 'dashboard', 'biometrics',
 ]
@@ -71,34 +69,37 @@ TEMPLATES = [{
 }]
 WSGI_APPLICATION = 'config.wsgi.application'
 ASGI_APPLICATION = 'config.asgi.application'
-DATABASE_URL = os.getenv('DATABASE_URL', '').strip()
-if DATABASE_URL:
-    database_url = urlparse(DATABASE_URL)
-    if database_url.scheme not in {'postgres', 'postgresql'} or not database_url.path:
-        raise ValueError('DATABASE_URL must be a PostgreSQL connection URL.')
-    database_options = {
-        key: values[-1]
-        for key, values in parse_qs(database_url.query).items()
-        if values
-    }
-    database_options.setdefault('sslmode', 'require')
-    DATABASES = {'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': unquote(database_url.path.lstrip('/')),
-        'USER': unquote(database_url.username or ''),
-        'PASSWORD': unquote(database_url.password or ''),
-        'HOST': database_url.hostname or '',
-        'PORT': str(database_url.port or ''),
-        'OPTIONS': database_options,
-        'CONN_MAX_AGE': int(os.getenv('DATABASE_CONN_MAX_AGE', '0')),
-        'CONN_HEALTH_CHECKS': True,
-    }}
+MONGODB_URI = os.getenv('MONGODB_URI', '').strip()
+if MONGODB_URI:
+    import django_mongodb_backend
+
+    DATABASES = {'default': django_mongodb_backend.parse_uri(MONGODB_URI)}
+elif not DEBUG:
+    raise RuntimeError('MONGODB_URI must be configured when DJANGO_DEBUG=False.')
 else:
     DATABASES = {'default': {'ENGINE': 'django.db.backends.sqlite3', 'NAME': BASE_DIR / 'db.sqlite3'}}
 
+if MONGODB_URI or env_bool('MONGODB_MIGRATIONS'):
+    MIGRATION_MODULES = {
+        'admin': 'mongo_migrations.admin',
+        'auth': 'mongo_migrations.auth',
+        'contenttypes': 'mongo_migrations.contenttypes',
+        'sessions': 'mongo_migrations.sessions',
+        'sites': 'mongo_migrations.sites',
+        'account': 'mongo_migrations.account',
+        'socialaccount': 'mongo_migrations.socialaccount',
+        'accounts': 'mongo_migrations.accounts',
+        'core': 'mongo_migrations.core',
+        'dashboard': 'mongo_migrations.dashboard',
+        'biometrics': 'mongo_migrations.biometrics',
+    }
+
 AUTH_USER_MODEL = 'accounts.User'
 AUTHENTICATION_BACKENDS = ['django.contrib.auth.backends.ModelBackend', 'allauth.account.auth_backends.AuthenticationBackend']
-SITE_ID = 1
+from bson import ObjectId
+
+SITE_ID = ObjectId('000000000000000000000001')
+SILENCED_SYSTEM_CHECKS = ['sites.E101']
 LOGIN_URL = '/accounts/login/'
 LOGIN_REDIRECT_URL = '/dashboard/'
 LOGOUT_REDIRECT_URL = '/accounts/login/'
@@ -118,7 +119,7 @@ STORAGES = {
     'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage' if DEBUG or IS_VERCEL else 'core.static_storage.NonStrictCompressedManifestStaticFilesStorage'},
 }
 MEDIA_URL = os.getenv('MEDIA_URL', '/media/')
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+DEFAULT_AUTO_FIELD = 'django_mongodb_backend.fields.ObjectIdAutoField'
 
 EMAIL_HOST = os.getenv('EMAIL_HOST', 'localhost'); EMAIL_PORT = int(os.getenv('EMAIL_PORT', '25'))
 EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', ''); EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
@@ -160,8 +161,8 @@ if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     if not os.getenv('CLOUDINARY_URL'):
         raise RuntimeError('CLOUDINARY_URL must be set in production.')
-    if not os.getenv('DATABASE_URL'):
-        raise RuntimeError('DATABASE_URL must be set in production.')
+    if not os.getenv('MONGODB_URI'):
+        raise RuntimeError('MONGODB_URI must be set in production.')
     CLOUDINARY_STORAGE = {'SECURE': True}
 
 RATELIMIT_ENABLE = True

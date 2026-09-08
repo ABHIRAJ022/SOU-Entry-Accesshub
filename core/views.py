@@ -1,6 +1,6 @@
 import time
 from django.contrib.staticfiles import finders
-from django.db import connection
+from django.contrib.auth import get_user_model
 from django.http import FileResponse, Http404, JsonResponse
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET
@@ -17,7 +17,7 @@ def health_check(request):
         return JsonResponse({'status': _health_cache['status']})
     database = 'ok'
     try:
-        with connection.cursor() as cursor: cursor.execute('SELECT 1')
+        get_user_model().objects.exists()
     except Exception:
         database = 'error'
     status = 'operational' if database == 'ok' else 'degraded'

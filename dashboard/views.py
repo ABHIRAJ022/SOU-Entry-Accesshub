@@ -5,9 +5,9 @@ import logging
 from decimal import Decimal, InvalidOperation
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.db import connection, transaction
+from django.db import connection
 from django.db.utils import ProgrammingError
-from django.db.models import Prefetch, Q
+from django.db.models import Q
 from django.http import HttpResponse, JsonResponse
 from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, redirect, render
@@ -151,20 +151,19 @@ def token_history(request, user_id):
 @require_POST
 @role_required(User.Role.ADMIN)
 def cancel_token(request, token_id):
-    with transaction.atomic():
-        scope = Q(user__in=_admin_students(request))
-        if request.user.is_superuser:
-            scope |= Q(guest_request__isnull=False)
-        token = get_object_or_404(CampusToken.objects.select_for_update().select_related('guest_request'), scope, public_id=token_id)
-        if token.revoked_at is None and token.expires_at > timezone.now() and token.used_at is None:
-            token.revoked_at = timezone.now()
-            token.save(update_fields=['revoked_at'])
-            if token.guest_request_id:
-                token.guest_request.status = GuestTokenRequest.Status.CANCELLED
-                token.guest_request.approved_by = request.user
-                token.guest_request.approved_at = timezone.now()
-                token.guest_request.save(update_fields=['status', 'approved_by', 'approved_at', 'updated_at'])
-            return JsonResponse({'status': 'cancelled'})
+    scope = Q(user__in=_admin_students(request))
+    if request.user.is_superuser:
+        scope |= Q(guest_request__isnull=False)
+    token = get_object_or_404(CampusToken.objects.select_related('guest_request'), scope, public_id=token_id)
+    if token.revoked_at is None and token.expires_at > timezone.now() and token.used_at is None:
+        token.revoked_at = timezone.now()
+        token.save(update_fields=['revoked_at'])
+        if token.guest_request_id:
+            token.guest_request.status = GuestTokenRequest.Status.CANCELLED
+            token.guest_request.approved_by = request.user
+            token.guest_request.approved_at = timezone.now()
+            token.guest_request.save(update_fields=['status', 'approved_by', 'approved_at', 'updated_at'])
+        return JsonResponse({'status': 'cancelled'})
     return JsonResponse({'error': 'Only a live, unused token can be cancelled.'}, status=409)
 
 @role_required(User.Role.SECURITY)
@@ -198,16 +197,15 @@ def _token_viewer_required(view):
 @require_GET
 @_guest_staff_required
 def guest_requests(request):
-    requests = GuestTokenRequest.objects.select_related('approved_by').prefetch_related(
-        Prefetch('token', queryset=CampusToken.objects.only(
-            'id', 'public_id', 'expires_at', 'guest_request_id', 'revoked_at',
-        ), to_attr='guest_token')
-    ).defer('live_photo').only(
+    requests = GuestTokenRequest.objects.select_related('approved_by').defer('live_photo').only(
         'id', 'name', 'email', 'mobile', 'purpose', 'status', 'created_at', 'approved_by_id',
         'approved_by__full_name',
     ).order_by('-created_at')
     requests = Paginator(requests, 50).get_page(request.GET.get('page'))
     for guest in requests:
+        guest.guest_token = CampusToken.objects.filter(guest_request=guest).only(
+            'id', 'public_id', 'expires_at', 'guest_request_id', 'revoked_at',
+        ).first()
         if guest.status == GuestTokenRequest.Status.APPROVED and guest.guest_token:
             guest.token_qr = qr_data_url(guest.guest_token)
         else:
@@ -221,12 +219,8 @@ def guest_requests(request):
 @require_GET
 @_guest_staff_required
 def guest_request_detail(request, request_id):
-    guest = get_object_or_404(
-        GuestTokenRequest.objects.select_related('approved_by').prefetch_related(
-            Prefetch('token', to_attr='guest_token')
-        ),
-        pk=request_id,
-    )
+    guest = get_object_or_404(GuestTokenRequest.objects.select_related('approved_by'), pk=request_id)
+    guest.guest_token = CampusToken.objects.filter(guest_request=guest).first()
     # Detect guest live photo MIME type to build a correct data URL
     photo = ''
     if guest.live_photo:
@@ -252,19 +246,18 @@ def guest_request_detail(request, request_id):
 @require_POST
 @_guest_staff_required
 def approve_guest_request(request, request_id):
-    with transaction.atomic():
-        guest = get_object_or_404(GuestTokenRequest.objects.select_for_update(), pk=request_id)
-        if guest.status in {GuestTokenRequest.Status.REJECTED, GuestTokenRequest.Status.CANCELLED}:
-            return JsonResponse({'error': 'This guest request is no longer active.'}, status=409)
-        if guest.status == GuestTokenRequest.Status.APPROVED:
-            return JsonResponse({'status': 'already-approved'})
-        if guest.status == GuestTokenRequest.Status.MAIN_ADMIN_REQUIRED and not request.user.is_superuser:
-            return JsonResponse({'error': 'A main administrator must approve a replacement token.'}, status=403)
-        token, raw_token = CampusToken.issue_for_guest(guest)
-        guest.status = GuestTokenRequest.Status.APPROVED
-        guest.approved_by = request.user
-        guest.approved_at = timezone.now()
-        guest.save(update_fields=['status', 'approved_by', 'approved_at', 'updated_at'])
+    guest = get_object_or_404(GuestTokenRequest.objects, pk=request_id)
+    if guest.status in {GuestTokenRequest.Status.REJECTED, GuestTokenRequest.Status.CANCELLED}:
+        return JsonResponse({'error': 'This guest request is no longer active.'}, status=409)
+    if guest.status == GuestTokenRequest.Status.APPROVED:
+        return JsonResponse({'status': 'already-approved'})
+    if guest.status == GuestTokenRequest.Status.MAIN_ADMIN_REQUIRED and not request.user.is_superuser:
+        return JsonResponse({'error': 'A main administrator must approve a replacement token.'}, status=403)
+    token, raw_token = CampusToken.issue_for_guest(guest)
+    guest.status = GuestTokenRequest.Status.APPROVED
+    guest.approved_by = request.user
+    guest.approved_at = timezone.now()
+    guest.save(update_fields=['status', 'approved_by', 'approved_at', 'updated_at'])
     messages.success(request, f'Temporary token created for {guest.name}: {raw_token}')
     send_token_created(token)
     return redirect('dashboard:guest_request_detail', request_id=guest.pk)
@@ -273,13 +266,12 @@ def approve_guest_request(request, request_id):
 @require_POST
 @_guest_staff_required
 def reject_guest_request(request, request_id):
-    with transaction.atomic():
-        guest = get_object_or_404(GuestTokenRequest.objects.select_for_update(), pk=request_id)
-        if guest.status == GuestTokenRequest.Status.PENDING:
-            guest.status = GuestTokenRequest.Status.REJECTED
-            guest.approved_by = request.user
-            guest.approved_at = timezone.now()
-            guest.save(update_fields=['status', 'approved_by', 'approved_at', 'updated_at'])
+    guest = get_object_or_404(GuestTokenRequest.objects, pk=request_id)
+    if guest.status == GuestTokenRequest.Status.PENDING:
+        guest.status = GuestTokenRequest.Status.REJECTED
+        guest.approved_by = request.user
+        guest.approved_at = timezone.now()
+        guest.save(update_fields=['status', 'approved_by', 'approved_at', 'updated_at'])
     return redirect('dashboard:guest_requests')
 
 @require_POST
@@ -330,12 +322,11 @@ def issue_token(request):
         snapshot = process_webcam_snapshot(payload)
     except SnapshotError as exc:
         return JsonResponse({'error': str(exc)}, status=400)
-    with transaction.atomic():
-        try:
-            token, raw_token = CampusToken.issue(request.user, duration)
-        except ValueError as exc:
-            return JsonResponse({'error': str(exc)}, status=409)
-        TokenAudit.objects.create(token=token, user=request.user, snapshot=snapshot, snapshot_size=len(snapshot), verification_method='webcam')
+    try:
+        token, raw_token = CampusToken.issue(request.user, duration)
+    except ValueError as exc:
+        return JsonResponse({'error': str(exc)}, status=409)
+    TokenAudit.objects.create(token=token, user=request.user, snapshot=snapshot, snapshot_size=len(snapshot), verification_method='webcam')
     send_token_created(token)
     return JsonResponse({'token': raw_token, 'token_id': str(token.public_id), 'generation': token.generation, 'expires_at': token.expires_at.isoformat(), 'server_now': timezone.now().isoformat(), 'qr_payload': signed_payload(token), 'qr_data_url': 'data:image/png;base64,' + base64.b64encode(qr_png(token)).decode(), 'pdf_url': reverse('dashboard:token_pdf', args=[token.public_id]), 'status_url': reverse('dashboard:token_status', args=[token.public_id])})
 
@@ -524,14 +515,12 @@ def validate_token(request):
             logger.warning('TokenScan model unavailable during validation; continuing without scan tracking: %s', exc)
             tokenscan_missing = True
 
-        with transaction.atomic():
-            # Lock the token without select_related to avoid outer join issue with FOR UPDATE
-            # (PostgreSQL doesn't allow FOR UPDATE on nullable outer joins)
-            token = CampusToken.objects.select_for_update().filter(pk=token.pk).first()
+        token = CampusToken.objects.filter(pk=token.pk).first()
 
-            if not token:
+        if not token:
                 return JsonResponse({'valid': False, 'error': 'Token no longer exists.'}, status=409)
 
+        if token:
             if token.revoked_at:
                 return JsonResponse({'valid': False, 'error': 'Token has been revoked.'}, status=409)
 

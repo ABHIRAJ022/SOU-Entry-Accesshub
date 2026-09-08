@@ -9,7 +9,6 @@ from django.contrib.auth.decorators import login_required
 from django.core.mail import send_mail
 from smtplib import SMTPException
 from django.core.paginator import Paginator
-from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods
@@ -64,7 +63,6 @@ def guest_request(request):
     return render(request, 'accounts/guest_request.html', {'form': form})
 
 @ratelimit(key='ip', rate='5/m', method='POST', block=True)
-@transaction.atomic
 @ensure_csrf_cookie
 def register(request):
     form = RegistrationForm(request.POST or None)
