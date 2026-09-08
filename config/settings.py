@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -72,6 +73,13 @@ ASGI_APPLICATION = 'config.asgi.application'
 MONGODB_URI = os.getenv('MONGODB_URI', '').strip()
 if not MONGODB_URI:
     raise RuntimeError('MONGODB_URI must be configured for every environment.')
+MONGODB_DB_NAME = os.getenv('MONGODB_DB_NAME', 'your_campus_token').strip()
+if not MONGODB_DB_NAME:
+    raise RuntimeError('MONGODB_DB_NAME must not be empty.')
+
+parsed_mongodb_uri = urlsplit(MONGODB_URI)
+if not parsed_mongodb_uri.path or parsed_mongodb_uri.path == '/':
+    MONGODB_URI = urlunsplit(parsed_mongodb_uri._replace(path=f'/{MONGODB_DB_NAME}'))
 
 import django_mongodb_backend
 from .django_compat import apply_python314_template_compatibility
