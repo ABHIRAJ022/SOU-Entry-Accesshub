@@ -156,7 +156,7 @@ def cancel_token(request, token_id):
         return JsonResponse({'status': 'cancelled'})
     return JsonResponse({'error': 'Only a live, unused token can be cancelled.'}, status=409)
 
-@role_required(User.Role.SECURITY)
+@role_required(User.Role.ADMIN, User.Role.SECURITY)
 def security_dashboard(request):
     guest_requests = Paginator(GuestTokenRequest.objects.filter(
         status=GuestTokenRequest.Status.PENDING,
@@ -470,7 +470,7 @@ def delete_location(request, location_id):
 
 
 @require_POST
-@role_required(User.Role.SECURITY)
+@role_required(User.Role.ADMIN, User.Role.SECURITY)
 def validate_token(request):
     try:
         try:
@@ -592,7 +592,7 @@ def validate_token(request):
 
 
 @require_POST
-@role_required(User.Role.SECURITY)
+@role_required(User.Role.ADMIN, User.Role.SECURITY)
 def assign_scan_location(request):
     try:
         payload = json.loads(request.body)
