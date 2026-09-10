@@ -3,6 +3,7 @@ from django.contrib.messages.api import MessageFailure
 from django.core.exceptions import ImproperlyConfigured
 from django.db import connection
 from django.db.utils import DatabaseError, OperationalError, ProgrammingError
+from django import forms
 
 from .models import CampusLocation, CampusToken, GuestTokenRequest, LocationCategory, TokenAudit, TokenNotification, TokenScan
 
@@ -19,7 +20,11 @@ class CampusLocationAdmin(admin.ModelAdmin):
 
     def get_form(self, request, obj=None, **kwargs):
         form = super().get_form(request, obj, **kwargs)
-        form.base_fields['category'].choices = _location_category_choices()
+        form.base_fields['category'] = forms.ChoiceField(
+            choices=_location_category_choices(),
+            label='Category',
+            required=True,
+        )
         return form
 
 
