@@ -74,7 +74,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!guestTokenCard) return;
     try {
       const saved = JSON.parse(localStorage.getItem('smartcampus_guest_token') || 'null');
-      if (!saved || !saved.tokenId || !saved.expiresAt) return;
+      if (!saved || !saved.tokenId || !saved.expiresAt || saved.tokenId !== guestTokenCard.dataset.tokenId) return;
       guestTokenCard.dataset.tokenId = saved.tokenId;
       guestTokenCard.dataset.tokenExpires = saved.expiresAt;
       if (saved.expiresAtMs) guestTokenCard.dataset.tokenExpiresMs = String(saved.expiresAtMs);
