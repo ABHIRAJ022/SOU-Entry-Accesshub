@@ -92,6 +92,9 @@ def admin_dashboard(request):
         )
     students_page = Paginator(students.order_by('full_name'), 50).get_page(request.GET.get('students_page'))
     staff_page = Paginator(staff_approvals.order_by('full_name'), 50).get_page(request.GET.get('staff_page'))
+    locations = CampusLocation.objects.filter(is_active=True)
+    if not request.user.is_superuser:
+        locations = locations.filter(created_by__branch_id=request.user.branch_id)
     return render(request, 'dashboard/admin.html', {
         'students': students_page,
         'staff_approvals': staff_page,
@@ -100,6 +103,7 @@ def admin_dashboard(request):
         'total_students': students.count(),
         'pending': students.filter(is_approved_by_admin=False, is_active=True, is_email_verified=True).count(),
         'active_staff': User.objects.filter(role=User.Role.SECURITY, is_active=True, is_approved_by_super_admin=True).count(),
+        'locations': locations.only('id', 'name', 'category').order_by('name'),
     })
 
 def _admin_students(request):

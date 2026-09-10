@@ -1,0 +1,50 @@
+<section class="mb-4">
+  <h2 class="h4">Campus verification gate scanner</h2>
+  <p class="text-secondary">Scan a signed QR pass once at the gate. Used or expired passes are rejected.</p>
+
+  {% csrf_token %}
+
+  <div class="d-flex gap-2 mb-3">
+    <button type="button" class="btn btn-outline-primary" id="start-scanner-btn" data-open-scanner>Open scanner</button>
+    <button type="button" class="btn btn-outline-secondary" id="stop-scanner-btn" data-close-scanner disabled>Close scanner</button>
+  </div>
+
+  <div class="card mb-4 shadow-sm">
+    <div class="card-body p-0 position-relative" style="min-height: 300px; background-color: #eaeaea;">
+      <div id="qr-reader" style="width: 100%; min-height: 300px;"></div>
+      <div id="scan-result" data-scan-result class="position-absolute bottom-0 start-0 w-100 bg-dark text-white p-2 text-center opacity-75" role="status" aria-live="assertive">Scanner closed.</div>
+    </div>
+  </div>
+
+  <div id="data-scan-details" data-scan-details class="d-none border rounded p-3 mb-3 bg-light">
+    <h3 class="h6">Token details</h3>
+    <div class="d-flex gap-4 align-items-start flex-wrap">
+      <img data-scan-photo class="rounded border d-none" width="160" height="160" alt="Scanned profile photo">
+      <dl class="row mb-0 flex-grow-1">
+        <dt class="col-sm-4">Name</dt><dd class="col-sm-8" data-scan-name></dd>
+        <dt class="col-sm-4">Token type</dt><dd class="col-sm-8" data-scan-holder-type></dd>
+        <dt class="col-sm-4">Enrollment number</dt><dd class="col-sm-8" data-scan-enrollment></dd>
+        <dt class="col-sm-4">Email</dt><dd class="col-sm-8" data-scan-email></dd>
+        <dt class="col-sm-4">Mobile</dt><dd class="col-sm-8" data-scan-mobile></dd>
+        <dt class="col-sm-4">Gender</dt><dd class="col-sm-8" data-scan-gender></dd>
+        <dt class="col-sm-4">Branch</dt><dd class="col-sm-8" data-scan-branch></dd>
+        <dt class="col-sm-4">Purpose</dt><dd class="col-sm-8" data-scan-purpose></dd>
+        <dt class="col-sm-4">Token Generated</dt><dd class="col-sm-8" data-scan-generated></dd>
+        <dt class="col-sm-4">Token Expires</dt><dd class="col-sm-8" data-scan-expires></dd>
+        <dt class="col-sm-4">Token ID</dt><dd class="col-sm-8 text-break" data-scan-token-id></dd>
+      </dl>
+    </div>
+    <a data-scan-pdf class="btn btn-outline-secondary mt-3" target="_blank" rel="noopener">Download token PDF</a>
+    <form data-scan-location-form class="mt-4" data-url="{% url 'assign_scan_location' %}">
+      <label class="form-label" for="scan-location">Location</label>
+      <select id="scan-location" class="form-select" data-scan-location required>
+        <option value="">Select a location</option>
+        {% for location in locations %}
+        <option value="{{ location.pk }}">{{ location.name }} ({{ location.get_category_display }})</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn btn-primary mt-3" data-scan-location-submit>Submit</button>
+      <div data-scan-location-status class="mt-2" role="status" aria-live="polite"></div>
+    </form>
+  </div>
+</section>
