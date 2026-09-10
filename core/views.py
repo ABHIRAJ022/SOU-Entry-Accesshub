@@ -25,6 +25,8 @@ def health_check(request):
     return JsonResponse({'status': status})
 
 def csrf_failure(request, reason=''):
+    if request.path.startswith('/api/') or request.headers.get('Accept') == 'application/json':
+        return JsonResponse({'error': 'Security check failed. Refresh the page and try again.'}, status=403)
     return render(request, 'csrf_failure.html', {'reason': reason}, status=403)
 
 def static_asset(request, path):

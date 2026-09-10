@@ -49,6 +49,16 @@ document.addEventListener('DOMContentLoaded', () => {
     return '';
   };
 
+  const readJsonResponse = async (response) => {
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      throw new Error(response.status === 401
+        ? 'Your session has expired. Please sign in again.'
+        : 'The server returned an unexpected response. Please refresh and try again.');
+    }
+    return response.json();
+  };
+
   const show = (valid, message) => {
     result.textContent = message;
     result.className = `scan-result mt-3 p-4 text-center fw-bold ${valid ? 'bg-success text-white' : 'bg-danger text-white'}`;
@@ -194,7 +204,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       console.log('API Response Status:', response.status);
       
-      const data = await response.json();
+      const data = await readJsonResponse(response);
       console.log('Token validation response:', data);
 
       if (response.status === 403) {
@@ -260,7 +270,7 @@ document.addEventListener('DOMContentLoaded', () => {
           },
           body: JSON.stringify({ scan_id: scanId, location_id: locationSelect.value }),
         });
-        const data = await response.json();
+        const data = await readJsonResponse(response);
         if (!response.ok || !data.saved) throw new Error(data.error || 'Location could not be saved.');
         locationStatus.textContent = `Location saved: ${data.location}`;
       } catch (error) {

@@ -42,8 +42,11 @@ def _safe_token_scans(token):
 def role_required(*roles):
     def decorator(view):
         @wraps(view)
-        @login_required
         def wrapped(request, *args, **kwargs):
+            if not request.user.is_authenticated:
+                if request.headers.get('Accept') == 'application/json':
+                    return JsonResponse({'error': 'Your session has expired. Please sign in again.'}, status=401)
+                return login_required(view)(request, *args, **kwargs)
             if request.user.role not in roles: return JsonResponse({'error': 'Forbidden'}, status=403)
             return view(request, *args, **kwargs)
         return wrapped
@@ -171,8 +174,11 @@ def security_dashboard(request):
 
 def _guest_staff_required(view):
     @wraps(view)
-    @login_required
     def wrapped(request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            if request.headers.get('Accept') == 'application/json':
+                return JsonResponse({'error': 'Your session has expired. Please sign in again.'}, status=401)
+            return login_required(view)(request, *args, **kwargs)
         if request.user.role != User.Role.SECURITY and not request.user.is_superuser:
             return JsonResponse({'error': 'Forbidden'}, status=403)
         return view(request, *args, **kwargs)
@@ -181,8 +187,11 @@ def _guest_staff_required(view):
 
 def _token_viewer_required(view):
     @wraps(view)
-    @login_required
     def wrapped(request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            if request.headers.get('Accept') == 'application/json':
+                return JsonResponse({'error': 'Your session has expired. Please sign in again.'}, status=401)
+            return login_required(view)(request, *args, **kwargs)
         if request.user.role not in (User.Role.STUDENT, User.Role.SECURITY) and not request.user.is_superuser:
             return JsonResponse({'error': 'Forbidden'}, status=403)
         return view(request, *args, **kwargs)
