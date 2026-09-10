@@ -68,7 +68,7 @@ def send_token_expiry_notice(token, kind):
             "If you did not create this pass, contact your campus administrator."
         )
         message = messages.get(kind, default_message)
-        send_mail('Your Li Campus Token pass expires soon', message, settings.DEFAULT_FROM_EMAIL, [token.user.email], fail_silently=False)
+        send_mail('Your Live Campus Token pass expires soon', message, settings.DEFAULT_FROM_EMAIL, [token.user.email], fail_silently=False)
         TokenNotification.objects.get_or_create(token=token, kind=kind)
     except (OSError, SMTPException):
         logger.exception('Token expiry email failed for %s', token.public_id)
