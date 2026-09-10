@@ -17,7 +17,7 @@ from biometrics.snapshots import SnapshotError, process_webcam_snapshot
 from accounts.models import User
 from .models import CampusToken, GuestTokenRequest, TokenAudit
 from .token_utils import pdf_pass, qr_data_url, qr_png, signed_payload, token_from_signed_payload
-from .models import CampusLocation
+from .models import CampusLocation, LocationCategory
 from .notifications import send_account_approved, send_token_created, send_token_expiry_notice
 
 TOKEN_DURATIONS = {30, 60, 120, 180, 240, 300, 360, 420, 480}
@@ -391,10 +391,18 @@ def _coordinates(payload):
     return latitude, longitude
 
 
+def _valid_location_category(category):
+    if not isinstance(category, str) or not category or len(category) > 50:
+        return False
+    return category in CampusLocation.Category.values or LocationCategory.objects.filter(code=category).exists()
+
+
 @require_GET
 @role_required(User.Role.ADMIN, User.Role.SECURITY, User.Role.STUDENT)
 def campus_map(request):
-    return render(request, 'dashboard/campus_map.html', {'is_location_admin': request.user.role == User.Role.ADMIN, 'categories': CampusLocation.Category.choices})
+    built_in = list(CampusLocation.Category.choices)
+    custom = LocationCategory.objects.exclude(code__in=dict(built_in)).values_list('code', 'name')
+    return render(request, 'dashboard/campus_map.html', {'is_location_admin': request.user.role == User.Role.ADMIN, 'categories': built_in + list(custom)})
 
 
 @require_GET
@@ -403,11 +411,13 @@ def locations_api(request):
     locations = CampusLocation.objects.filter(is_active=True).order_by('name').values(
         'id', 'name', 'category', 'latitude', 'longitude', 'description', 'building_code', 'is_active',
     )[:200]
+    category_labels = dict(CampusLocation.Category.choices)
+    category_labels.update(LocationCategory.objects.values_list('code', 'name'))
     return JsonResponse({'locations': [{
         **{**location, 'id': str(location['id'])},
         'latitude': float(location['latitude']),
         'longitude': float(location['longitude']),
-        'category_label': dict(CampusLocation.Category.choices)[location['category']],
+        'category_label': category_labels.get(location['category'], location['category'].replace('_', ' ').title()),
     } for location in locations]})
 
 
@@ -418,7 +428,7 @@ def create_location(request):
         payload = json.loads(request.body)
         latitude, longitude = _coordinates(payload)
         category = payload['category']
-        if category not in CampusLocation.Category.values:
+        if not _valid_location_category(category):
             raise ValueError('Invalid campus location category.')
         location = CampusLocation.objects.create(name=str(payload['name']).strip()[:120], category=category, latitude=latitude, longitude=longitude, description=str(payload.get('description', ''))[:2000], building_code=str(payload.get('building_code', ''))[:32], created_by=request.user)
     except (json.JSONDecodeError, KeyError, ValueError) as exc:
@@ -434,7 +444,7 @@ def update_location(request, location_id):
     try:
         payload = json.loads(request.body)
         latitude, longitude = _coordinates(payload)
-        if payload.get('category') not in CampusLocation.Category.values:
+        if not _valid_location_category(payload.get('category')):
             raise ValueError('Invalid campus location category.')
         location.name = str(payload['name']).strip()[:120]
         location.category = payload['category']

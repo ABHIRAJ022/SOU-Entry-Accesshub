@@ -131,9 +131,16 @@ class CampusLocation(models.Model):
         MEDICAL_CENTER = 'MEDICAL_CENTER', 'Medical Center'
         LAB = 'LAB', 'Lab'
         AUDITORIUM = 'AUDITORIUM', 'Auditorium'
+        CLASSROOM = 'CLASSROOM', 'Classroom'
+        STAFF_ROOM = 'STAFF_ROOM', 'Staff Room'
+        HOD_OFFICE = 'HOD_OFFICE', 'HOD Office'
+        DEAN_OFFICE = 'DEAN_OFFICE', 'Dean Office'
+        ADMIN_CELL = 'ADMIN_CELL', 'Admin Cell'
+        STUDENT_SECTION = 'STUDENT_SECTION', 'Student Section'
+        SCHOLARSHIP_CELL = 'SCHOLARSHIP_CELL', 'Scholarship Cell'
 
     name = models.CharField(max_length=120)
-    category = models.CharField(max_length=20, choices=Category.choices)
+    category = models.CharField(max_length=50)
     latitude = models.DecimalField(max_digits=9, decimal_places=6)
     longitude = models.DecimalField(max_digits=9, decimal_places=6)
     description = models.TextField(blank=True)
@@ -145,6 +152,23 @@ class CampusLocation(models.Model):
 
     def __str__(self):
         return f'{self.name} ({self.get_category_display()})'
+
+    def get_category_display(self):
+        return dict(self.Category.choices).get(self.category, self.category.replace('_', ' ').title())
+
+
+class LocationCategory(models.Model):
+    code = models.CharField(max_length=50, unique=True)
+    name = models.CharField(max_length=80, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ('name',)
+        verbose_name = 'Campus location category'
+        verbose_name_plural = 'Campus location categories'
+
+    def __str__(self):
+        return self.name
 
 
 class TokenNotification(models.Model):

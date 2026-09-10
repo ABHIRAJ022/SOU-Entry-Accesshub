@@ -4,7 +4,7 @@ from django.core.exceptions import ImproperlyConfigured
 from django.db import connection
 from django.db.utils import DatabaseError, OperationalError, ProgrammingError
 
-from .models import CampusLocation, CampusToken, GuestTokenRequest, TokenAudit, TokenNotification, TokenScan
+from .models import CampusLocation, CampusToken, GuestTokenRequest, LocationCategory, TokenAudit, TokenNotification, TokenScan
 
 
 def _token_scan_table_available():
@@ -16,6 +16,39 @@ class CampusLocationAdmin(admin.ModelAdmin):
     list_display = ('name', 'category', 'building_code', 'latitude', 'longitude', 'is_active')
     list_filter = ('category', 'is_active')
     search_fields = ('name', 'building_code')
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        form.base_fields['category'].choices = _location_category_choices()
+        return form
+
+
+def _location_category_choices():
+    built_in = list(CampusLocation.Category.choices)
+    custom = LocationCategory.objects.exclude(code__in=dict(built_in)).values_list('code', 'name')
+    return built_in + list(custom)
+
+
+@admin.register(LocationCategory)
+class LocationCategoryAdmin(admin.ModelAdmin):
+    list_display = ('name', 'code', 'created_at')
+    search_fields = ('name', 'code')
+    readonly_fields = ('created_at',)
+
+    def has_module_permission(self, request):
+        return request.user.is_superuser
+
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def has_add_permission(self, request):
+        return request.user.is_superuser
+
+    def has_change_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def has_delete_permission(self, request, obj=None):
+        return request.user.is_superuser
 
 
 class TokenScanInline(admin.TabularInline):
