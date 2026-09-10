@@ -401,17 +401,45 @@ def _valid_location_category(category):
     return category in CampusLocation.Category.values or LocationCategory.objects.filter(code=category).exists()
 
 
+DEFAULT_CAMPUS_LOCATIONS = (
+    ('Main Campus Entrance', CampusLocation.Category.SECURITY_GATE, '23.097214', '72.541012', 'MAIN', 'Main entrance'),
+    ('Block A (Admin & Engineering)', CampusLocation.Category.ADMIN_BLOCK, '23.097050', '72.540650', 'BLK-A', 'Admin and Engineering block'),
+    ('Block B (Labs & Canteen)', CampusLocation.Category.LAB, '23.097320', '72.540720', 'BLK-B', 'Labs and canteen block'),
+    ('Block C (Computer Apps)', CampusLocation.Category.DEPARTMENT, '23.097110', '72.540250', 'BLK-C', 'Computer Applications block'),
+    ('Block D (Management & Pharmacy)', CampusLocation.Category.DEPARTMENT, '23.096850', '72.540400', 'BLK-D', 'Management and Pharmacy block'),
+    ('Block E (New IT & Design Building)', CampusLocation.Category.DEPARTMENT, '23.097455', '72.540193', 'BLK-E', 'New IT and Design building'),
+)
+
+
+def _ensure_default_campus_locations(user):
+    if CampusLocation.objects.exists():
+        return
+    CampusLocation.objects.bulk_create([
+        CampusLocation(
+            name=name,
+            category=category,
+            latitude=latitude,
+            longitude=longitude,
+            building_code=building_code,
+            description=description,
+            created_by=user,
+        )
+        for name, category, latitude, longitude, building_code, description in DEFAULT_CAMPUS_LOCATIONS
+    ])
+
+
 @require_GET
 @role_required(User.Role.ADMIN, User.Role.SECURITY, User.Role.STUDENT)
 def campus_map(request):
     built_in = list(CampusLocation.Category.choices)
     custom = LocationCategory.objects.exclude(code__in=dict(built_in)).values_list('code', 'name')
-    return render(request, 'dashboard/campus_map.html', {'is_location_admin': request.user.role == User.Role.ADMIN, 'categories': built_in + list(custom)})
+    return render(request, 'dashboard/campus_map.html', {'is_location_admin': request.user.is_superuser, 'categories': built_in + list(custom)})
 
 
 @require_GET
 @role_required(User.Role.ADMIN, User.Role.SECURITY, User.Role.STUDENT)
 def locations_api(request):
+    _ensure_default_campus_locations(request.user)
     locations = CampusLocation.objects.filter(is_active=True).order_by('name').values(
         'id', 'name', 'category', 'latitude', 'longitude', 'description', 'building_code', 'is_active',
     )[:200]

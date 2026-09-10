@@ -1,7 +1,7 @@
 document.addEventListener('DOMContentLoaded', async () => {
   const element = document.querySelector('#campus-map');
   if (!element || !window.L) return;
-  const map = L.map(element).setView([20.5937, 78.9629], 5);
+  const map = L.map(element).setView([23.097214, 72.540600], 17);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 19, attribution: '&copy; OpenStreetMap contributors'}).addTo(map);
   const markers = [];
   let route;
@@ -18,6 +18,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       const category = document.createElement('span');
       category.textContent = location.category_label;
       popup.append(category, document.createElement('br'));
+      const coordinates = document.createElement('span');
+      coordinates.textContent = `${location.building_code || 'No building code'} | ${location.latitude}, ${location.longitude}`;
+      popup.append(coordinates, document.createElement('br'));
       const description = document.createElement('span');
       description.textContent = location.description || '';
       popup.append(description, document.createElement('br'));
@@ -42,7 +45,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   };
   const response = await fetch('/api/locations/', {credentials: 'same-origin'});
-  locations = (await response.json()).locations || [];
+  const data = await response.json();
+  if (!response.ok) {
+    message.textContent = data.error || 'Campus locations could not be loaded.';
+    return;
+  }
+  locations = data.locations || [];
   draw(locations);
   if (locations.length) map.fitBounds(L.latLngBounds(locations.map((location) => [location.latitude, location.longitude])).pad(0.15));
   document.querySelectorAll('[data-map-filter]').forEach((button) => button.addEventListener('click', () => draw(button.dataset.mapFilter === 'ALL' ? locations : locations.filter((location) => location.category === button.dataset.mapFilter))));
