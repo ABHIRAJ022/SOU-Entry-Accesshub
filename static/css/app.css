@@ -1,3 +1,7 @@
+.campus-map {
+	height: 560px;
+}
+
 :root {
 	--campus-ink: #102a43;
 	--campus-muted: #627d98;

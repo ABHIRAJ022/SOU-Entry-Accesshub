@@ -164,7 +164,8 @@ SECURE_CONTENT_TYPE_NOSNIFF = True; X_FRAME_OPTIONS = 'DENY'; SECURE_REFERRER_PO
 CONTENT_SECURITY_POLICY = {'DIRECTIVES': {
     'default-src': ("'self'",), 'script-src': ("'self'", 'https://cdn.jsdelivr.net'),
     'style-src': ("'self'", 'https://cdn.jsdelivr.net'), 'font-src': ("'self'", 'https://cdn.jsdelivr.net'),
-    'img-src': ("'self'", 'data:', 'https://res.cloudinary.com'), 'connect-src': ("'self'",),
+    'img-src': ("'self'", 'data:', 'https://res.cloudinary.com', 'https://*.tile.openstreetmap.org'),
+    'connect-src': ("'self'", 'https://router.project-osrm.org'),
 }}
 CORS_ALLOWED_ORIGINS = [origin.strip() for origin in os.getenv('CORS_ALLOWED_ORIGINS', '').split(',') if origin.strip()]
 CORS_ALLOW_CREDENTIALS = True
