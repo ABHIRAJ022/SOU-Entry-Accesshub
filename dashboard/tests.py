@@ -605,3 +605,64 @@ class TokenScanTests(TestCase):
         self.assertEqual(TokenScan.objects.filter(token=self.token).count(), 3)
         # App logic should treat token with >=3 scans as blocked; simulate that check
         self.assertTrue(TokenScan.objects.filter(token=self.token).count() >= 3)
+
+    def test_security_page_lists_only_active_locations(self):
+        active = CampusLocation.objects.create(
+            name='North Gate', category=CampusLocation.Category.SECURITY_GATE,
+            latitude=12, longitude=34, created_by=self.security1,
+        )
+        CampusLocation.objects.create(
+            name='Closed Gate', category=CampusLocation.Category.SECURITY_GATE,
+            latitude=12, longitude=34, is_active=False, created_by=self.security1,
+        )
+        self.client.force_login(self.security1)
+        response = self.client.get(reverse('dashboard:security'))
+        self.assertContains(response, active.name)
+        self.assertNotContains(response, 'Closed Gate')
+
+    def test_security_can_assign_active_location_to_scan(self):
+        location = CampusLocation.objects.create(
+            name='South Gate', category=CampusLocation.Category.SECURITY_GATE,
+            latitude=12, longitude=34, created_by=self.security1,
+        )
+        self.client.force_login(self.security1)
+        validation = self.client.post(
+            reverse('validate_token'), {'qr_payload': signed_payload(self.token)},
+            content_type='application/json', secure=True,
+        )
+        self.assertTrue(validation.json()['valid'])
+        scan = TokenScan.objects.get(token=self.token, scanned_by=self.security1)
+        assignment = self.client.post(
+            reverse('assign_scan_location'),
+            {'scan_id': str(scan.pk), 'location_id': str(location.pk)},
+            content_type='application/json', secure=True,
+        )
+        self.assertEqual(assignment.status_code, 200)
+        scan.refresh_from_db()
+        self.assertEqual(scan.location_id, location.pk)
+
+    def test_security_cannot_assign_inactive_location_or_another_users_scan(self):
+        inactive = CampusLocation.objects.create(
+            name='Closed Gate', category=CampusLocation.Category.SECURITY_GATE,
+            latitude=12, longitude=34, is_active=False, created_by=self.security1,
+        )
+        self.client.force_login(self.security1)
+        self.client.post(
+            reverse('validate_token'), {'qr_payload': signed_payload(self.token)},
+            content_type='application/json', secure=True,
+        )
+        scan = TokenScan.objects.get(token=self.token, scanned_by=self.security1)
+        inactive_assignment = self.client.post(
+            reverse('assign_scan_location'),
+            {'scan_id': str(scan.pk), 'location_id': str(inactive.pk)},
+            content_type='application/json', secure=True,
+        )
+        self.assertEqual(inactive_assignment.status_code, 404)
+
+        self.client.force_login(self.security2)
+        other_user_assignment = self.client.post(
+            reverse('assign_scan_location'),
+            {'scan_id': str(scan.pk), 'location_id': str(inactive.pk)},
+            content_type='application/json', secure=True,
+        )
+        self.assertEqual(other_user_assignment.status_code, 404)

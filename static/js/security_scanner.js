@@ -6,6 +6,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const details = document.querySelector('[data-scan-details]');
   const photo = document.querySelector('[data-scan-photo]');
   const pdf = document.querySelector('[data-scan-pdf]');
+  const locationForm = document.querySelector('[data-scan-location-form]');
+  const locationSelect = document.querySelector('[data-scan-location]');
+  const locationSubmit = document.querySelector('[data-scan-location-submit]');
+  const locationStatus = document.querySelector('[data-scan-location-status]');
+  let scanId = '';
 
   // Field mappings
   const fields = {
@@ -103,6 +108,11 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       // Show details section
+      scanId = data.scan_id || '';
+      if (locationForm) locationForm.classList.toggle('d-none', !scanId);
+      if (locationSelect) locationSelect.value = '';
+      if (locationSubmit) locationSubmit.disabled = !scanId;
+      if (locationStatus) locationStatus.textContent = '';
       details.classList.remove('d-none');
       console.log('Token details displayed successfully');
     } catch (error) {
@@ -232,6 +242,33 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }, 4000);
   };
+
+  if (locationForm) {
+    locationForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (!locationSelect || !locationSelect.value || !scanId) return;
+      locationSubmit.disabled = true;
+      locationStatus.textContent = 'Saving location...';
+      try {
+        const response = await fetch(locationForm.dataset.url, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken(),
+            'Accept': 'application/json',
+          },
+          body: JSON.stringify({ scan_id: scanId, location_id: locationSelect.value }),
+        });
+        const data = await response.json();
+        if (!response.ok || !data.saved) throw new Error(data.error || 'Location could not be saved.');
+        locationStatus.textContent = `Location saved: ${data.location}`;
+      } catch (error) {
+        locationStatus.textContent = error.message || 'Location could not be saved.';
+        locationSubmit.disabled = false;
+      }
+    });
+  }
 
   // Wire up buttons
   if (openButton) {

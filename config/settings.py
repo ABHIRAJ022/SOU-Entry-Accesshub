@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import quote_plus, unquote_plus, urlsplit, urlunsplit
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -78,6 +78,14 @@ if not MONGODB_DB_NAME:
     raise RuntimeError('MONGODB_DB_NAME must not be empty.')
 
 parsed_mongodb_uri = urlsplit(MONGODB_URI)
+if '@' in parsed_mongodb_uri.netloc:
+    userinfo, host = parsed_mongodb_uri.netloc.rsplit('@', 1)
+    username, separator, password = userinfo.partition(':')
+    encoded_userinfo = quote_plus(unquote_plus(username))
+    if separator:
+        encoded_userinfo += f':{quote_plus(unquote_plus(password))}'
+    MONGODB_URI = urlunsplit(parsed_mongodb_uri._replace(netloc=f'{encoded_userinfo}@{host}'))
+    parsed_mongodb_uri = urlsplit(MONGODB_URI)
 if not parsed_mongodb_uri.path or parsed_mongodb_uri.path == '/':
     MONGODB_URI = urlunsplit(parsed_mongodb_uri._replace(path=f'/{MONGODB_DB_NAME}'))
 

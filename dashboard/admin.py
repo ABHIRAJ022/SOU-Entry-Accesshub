@@ -20,8 +20,8 @@ class CampusLocationAdmin(admin.ModelAdmin):
 
 class TokenScanInline(admin.TabularInline):
     model = TokenScan
-    fields = ('scanned_by', 'scanned_at')
-    readonly_fields = ('scanned_by', 'scanned_at')
+    fields = ('scanned_by', 'location', 'scanned_at')
+    readonly_fields = ('scanned_by', 'location', 'scanned_at')
     extra = 0
     can_delete = False
 

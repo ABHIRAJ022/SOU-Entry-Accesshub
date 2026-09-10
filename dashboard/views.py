@@ -28,9 +28,10 @@ def _safe_token_scans(token):
         return []
     try:
         from .models import TokenScan
-        return list(TokenScan.objects.filter(token=token).select_related('scanned_by').only(
+        return list(TokenScan.objects.filter(token=token).select_related('scanned_by', 'location').only(
             'id', 'token_id', 'scanned_at', 'scanned_by_id',
             'scanned_by__full_name', 'scanned_by__email',
+            'location_id', 'location__name',
         ).order_by('-scanned_at')[:50])
     except Exception:
         logger = logging.getLogger(__name__)
@@ -160,7 +161,8 @@ def security_dashboard(request):
     guest_requests = Paginator(GuestTokenRequest.objects.filter(
         status=GuestTokenRequest.Status.PENDING,
     ).only('id', 'name', 'purpose', 'created_at').order_by('-created_at'), 25).get_page(request.GET.get('page'))
-    return render(request, 'dashboard/security.html', {'guest_requests': guest_requests})
+    locations = CampusLocation.objects.filter(is_active=True).only('id', 'name', 'category').order_by('name')
+    return render(request, 'dashboard/security.html', {'guest_requests': guest_requests, 'locations': locations})
 
 
 def _guest_staff_required(view):
@@ -523,7 +525,7 @@ def validate_token(request):
                 return JsonResponse({'valid': False, 'error': 'You have already scanned this token.'}, status=409)
             if not tokenscan_missing:
                 try:
-                    TokenScan.objects.create(token=token, scanned_by=request.user)
+                    scan = TokenScan.objects.create(token=token, scanned_by=request.user)
                 except DatabaseError:
                     logging.getLogger(__name__).warning('TokenScan could not be saved; continuing without recording this scan.', exc_info=True)
                     tokenscan_missing = True
@@ -571,8 +573,30 @@ def validate_token(request):
             'profile_photo': photo_data_url,
             'pdf_url': reverse('dashboard:token_pdf', args=[token.public_id]),
             'scan_recorded': not tokenscan_missing,
+            'scan_id': str(scan.pk) if not tokenscan_missing else '',
         })
     except Exception as e:
         logger = logging.getLogger(__name__)
         logger.exception('Error in validate_token endpoint')
         return JsonResponse({'valid': False, 'error': f'Server error: {str(e)}'}, status=500)
+
+
+@require_POST
+@role_required(User.Role.SECURITY)
+def assign_scan_location(request):
+    try:
+        payload = json.loads(request.body)
+        scan_id = payload.get('scan_id')
+        location_id = payload.get('location_id')
+    except (json.JSONDecodeError, TypeError):
+        return JsonResponse({'error': 'Invalid request.'}, status=400)
+
+    if not scan_id or not location_id:
+        return JsonResponse({'error': 'A scan and location are required.'}, status=400)
+
+    from .models import TokenScan
+    scan = get_object_or_404(TokenScan, pk=scan_id, scanned_by=request.user)
+    location = get_object_or_404(CampusLocation, pk=location_id, is_active=True)
+    scan.location = location
+    scan.save(update_fields=['location'])
+    return JsonResponse({'saved': True, 'location': location.name})

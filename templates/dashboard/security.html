@@ -64,6 +64,18 @@
     </div>
     
     <a data-scan-pdf class="btn btn-outline-secondary mt-3" target="_blank" rel="noopener">Download token PDF</a>
+
+    <form data-scan-location-form class="mt-4" data-url="{% url 'assign_scan_location' %}">
+      <label class="form-label" for="scan-location">Location</label>
+      <select id="scan-location" class="form-select" data-scan-location required>
+        <option value="">Select a location</option>
+        {% for location in locations %}
+        <option value="{{ location.pk }}">{{ location.name }} ({{ location.get_category_display }})</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn btn-primary mt-3" data-scan-location-submit>Submit</button>
+      <div data-scan-location-status class="mt-2" role="status" aria-live="polite"></div>
+    </form>
   </div>
 </div>
 
