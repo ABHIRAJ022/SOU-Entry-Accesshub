@@ -190,6 +190,7 @@ class TokenScan(models.Model):
     token = models.ForeignKey(CampusToken, on_delete=models.CASCADE, related_name='scans')
     scanned_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='token_scans')
     location = models.ForeignKey(CampusLocation, null=True, blank=True, on_delete=models.PROTECT, related_name='token_scans')
+    custom_location = models.CharField(max_length=120, blank=True)
     scanned_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

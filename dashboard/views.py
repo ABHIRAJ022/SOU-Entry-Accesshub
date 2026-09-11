@@ -639,15 +639,30 @@ def assign_scan_location(request):
         payload = json.loads(request.body)
         scan_id = payload.get('scan_id')
         location_id = payload.get('location_id')
+        location_choice = payload.get('location_choice')
+        custom_location = str(payload.get('custom_location', '')).strip()
     except (json.JSONDecodeError, TypeError):
         return JsonResponse({'error': 'Invalid request.'}, status=400)
 
-    if not scan_id or not location_id:
+    if not scan_id or (not location_id and not location_choice):
         return JsonResponse({'error': 'A scan and location are required.'}, status=400)
 
     from .models import TokenScan
     scan = get_object_or_404(TokenScan, pk=scan_id, scanned_by=request.user)
+    if location_choice:
+        if location_choice == 'vc_office':
+            location_name = 'VC Office'
+        elif location_choice == 'other' and custom_location:
+            location_name = custom_location[:120]
+        else:
+            return JsonResponse({'error': 'Choose VC Office or enter another location.'}, status=400)
+        scan.location = None
+        scan.custom_location = location_name
+        scan.save(update_fields=['location', 'custom_location'])
+        return JsonResponse({'saved': True, 'location': location_name})
+
     location = get_object_or_404(CampusLocation, pk=location_id, is_active=True)
     scan.location = location
-    scan.save(update_fields=['location'])
+    scan.custom_location = ''
+    scan.save(update_fields=['location', 'custom_location'])
     return JsonResponse({'saved': True, 'location': location.name})

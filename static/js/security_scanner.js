@@ -8,6 +8,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const pdf = document.querySelector('[data-scan-pdf]');
   const locationForm = document.querySelector('[data-scan-location-form]');
   const locationSelect = document.querySelector('[data-scan-location]');
+  const customLocationWrapper = document.querySelector('[data-custom-location-wrapper]');
+  const customLocationInput = document.querySelector('[data-custom-location]');
   const locationSubmit = document.querySelector('[data-scan-location-submit]');
   const locationStatus = document.querySelector('[data-scan-location-status]');
   let scanId = '';
@@ -121,6 +123,8 @@ document.addEventListener('DOMContentLoaded', () => {
       scanId = data.scan_id || '';
       if (locationForm) locationForm.classList.toggle('d-none', !scanId);
       if (locationSelect) locationSelect.value = '';
+      if (customLocationInput) customLocationInput.value = '';
+      if (customLocationWrapper) customLocationWrapper.classList.add('d-none');
       if (locationSubmit) locationSubmit.disabled = !scanId;
       if (locationStatus) locationStatus.textContent = '';
       details.classList.remove('d-none');
@@ -254,9 +258,26 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   if (locationForm) {
+    if (locationSelect) {
+      locationSelect.addEventListener('change', () => {
+        const isOther = locationSelect.value === 'other';
+        customLocationWrapper?.classList.toggle('d-none', !isOther);
+        if (customLocationInput) {
+          customLocationInput.required = isOther;
+          if (!isOther) customLocationInput.value = '';
+        }
+      });
+    }
+
     locationForm.addEventListener('submit', async (event) => {
       event.preventDefault();
       if (!locationSelect || !locationSelect.value || !scanId) return;
+      const customLocation = customLocationInput?.value.trim() || '';
+      if (locationSelect.value === 'other' && !customLocation) {
+        customLocationInput?.focus();
+        locationStatus.textContent = 'Enter the location before submitting.';
+        return;
+      }
       locationSubmit.disabled = true;
       locationStatus.textContent = 'Saving location...';
       try {
@@ -268,7 +289,11 @@ document.addEventListener('DOMContentLoaded', () => {
             'X-CSRFToken': getCsrfToken(),
             'Accept': 'application/json',
           },
-          body: JSON.stringify({ scan_id: scanId, location_id: locationSelect.value }),
+          body: JSON.stringify({
+            scan_id: scanId,
+            location_choice: locationSelect.value,
+            custom_location: customLocation,
+          }),
         });
         const data = await readJsonResponse(response);
         if (!response.ok || !data.saved) throw new Error(data.error || 'Location could not be saved.');

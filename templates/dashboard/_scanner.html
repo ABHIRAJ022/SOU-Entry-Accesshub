@@ -39,10 +39,13 @@
       <label class="form-label" for="scan-location">Location</label>
       <select id="scan-location" class="form-select" data-scan-location required>
         <option value="">Select a location</option>
-        {% for location in locations %}
-        <option value="{{ location.pk }}">{{ location.name }} ({{ location.get_category_display }})</option>
-        {% endfor %}
+        <option value="vc_office">VC Office</option>
+        <option value="other">Other</option>
       </select>
+      <div class="mt-3 d-none" data-custom-location-wrapper>
+        <label class="form-label" for="custom-scan-location">Enter location</label>
+        <input id="custom-scan-location" class="form-control" data-custom-location maxlength="120" placeholder="e.g. Main gate, Library entrance">
+      </div>
       <button type="submit" class="btn btn-primary mt-3" data-scan-location-submit>Submit</button>
       <div data-scan-location-status class="mt-2" role="status" aria-live="polite"></div>
     </form>
