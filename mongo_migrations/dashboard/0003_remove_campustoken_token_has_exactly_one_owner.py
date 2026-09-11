@@ -9,9 +9,5 @@ class Migration(migrations.Migration):
         ("dashboard", "0002_tokenscan_location"),
     ]
 
-    operations = [
-        migrations.RemoveConstraint(
-            model_name="campustoken",
-            name="token_has_exactly_one_owner",
-        ),
-    ]
+    # The MongoDB initial migration never creates this SQL-only constraint.
+    operations = []
