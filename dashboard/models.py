@@ -191,6 +191,9 @@ class TokenScan(models.Model):
     scanned_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='token_scans')
     location = models.ForeignKey(CampusLocation, null=True, blank=True, on_delete=models.PROTECT, related_name='token_scans')
     custom_location = models.CharField(max_length=120, blank=True)
+    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    accuracy = models.FloatField(null=True, blank=True)
     scanned_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -198,3 +201,32 @@ class TokenScan(models.Model):
             models.UniqueConstraint(fields=('token', 'scanned_by'), name='unique_token_scan_per_user'),
         ]
         ordering = ['-scanned_at']
+
+
+class UserLocation(models.Model):
+    """The latest explicitly shared position for a user."""
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='latest_location')
+    latitude = models.DecimalField(max_digits=9, decimal_places=6)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6)
+    accuracy = models.FloatField(null=True, blank=True)
+    recorded_at = models.DateTimeField()
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [models.Index(fields=('recorded_at',))]
+
+
+class LocationHistory(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='location_history')
+    latitude = models.DecimalField(max_digits=9, decimal_places=6)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6)
+    accuracy = models.FloatField(null=True, blank=True)
+    recorded_at = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ('-recorded_at',)
+        indexes = [
+            models.Index(fields=('user', '-recorded_at')),
+            models.Index(fields=('recorded_at',)),
+        ]

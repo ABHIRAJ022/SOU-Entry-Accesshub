@@ -61,6 +61,20 @@ document.addEventListener('DOMContentLoaded', () => {
     return response.json();
   };
 
+  const getScanLocation = () => new Promise((resolve) => {
+    if (!navigator.geolocation) return resolve({});
+    navigator.geolocation.getCurrentPosition(
+      ({coords, timestamp}) => resolve({
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        accuracy: coords.accuracy,
+        recorded_at: new Date(timestamp).toISOString(),
+      }),
+      () => resolve({}),
+      {enableHighAccuracy: true, maximumAge: 30000, timeout: 5000},
+    );
+  });
+
   const show = (valid, message) => {
     result.textContent = message;
     result.className = `scan-result mt-3 p-4 text-center fw-bold ${valid ? 'bg-success text-white' : 'bg-danger text-white'}`;
@@ -194,6 +208,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       console.log('Scanning QR payload:', qrPayload.substring(0, 50) + '...');
       console.log('CSRF token length:', csrfToken.length, '(should be 32)');
+      const scanLocation = await getScanLocation();
       
       const response = await fetch('/api/tokens/validate/', {
         method: 'POST',
@@ -203,7 +218,7 @@ document.addEventListener('DOMContentLoaded', () => {
           'X-CSRFToken': csrfToken,
           'Accept': 'application/json',
         },
-        body: JSON.stringify({ qr_payload: qrPayload }),
+        body: JSON.stringify({ qr_payload: qrPayload, ...scanLocation }),
       });
 
       console.log('API Response Status:', response.status);

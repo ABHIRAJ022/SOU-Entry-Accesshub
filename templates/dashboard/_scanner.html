@@ -39,6 +39,7 @@
       <label class="form-label" for="scan-location">Location</label>
       <select id="scan-location" class="form-select" data-scan-location required>
         <option value="">Select a location</option>
+        {% for location in locations %}<option value="{{ location.id }}">{{ location.name }}</option>{% endfor %}
         <option value="vc_office">VC Office</option>
         <option value="other">Other</option>
       </select>

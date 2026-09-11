@@ -447,7 +447,11 @@ def _ensure_default_campus_locations(user):
 def campus_map(request):
     built_in = list(CampusLocation.Category.choices)
     custom = LocationCategory.objects.exclude(code__in=dict(built_in)).values_list('code', 'name')
-    return render(request, 'dashboard/campus_map.html', {'is_location_admin': request.user.is_superuser, 'categories': built_in + list(custom)})
+    return render(request, 'dashboard/campus_map.html', {
+        'is_location_admin': request.user.is_superuser,
+        'is_location_viewer': request.user.is_superuser or request.user.role in (User.Role.ADMIN, User.Role.SECURITY),
+        'categories': built_in + list(custom),
+    })
 
 
 @require_GET
@@ -518,6 +522,8 @@ def delete_location(request, location_id):
 @require_POST
 @role_required(User.Role.ADMIN, User.Role.SECURITY)
 def validate_token(request):
+    if request.META.get('CONTENT_LENGTH') and int(request.META['CONTENT_LENGTH']) > 32 * 1024:
+        return JsonResponse({'valid': False, 'error': 'The scan request is too large.'}, status=413)
     try:
         try:
             payload = json.loads(request.body)
@@ -525,9 +531,14 @@ def validate_token(request):
             
             if not qr_payload:
                 return JsonResponse({'valid': False, 'error': 'No QR payload provided.'}, status=400)
-            
+            scan_coordinates = (None, None, None)
+            if payload.get('latitude') is not None or payload.get('longitude') is not None:
+                from .location_service import validate_coordinates
+                scan_coordinates = validate_coordinates(
+                    payload.get('latitude'), payload.get('longitude'), payload.get('accuracy')
+                )
             token = token_from_signed_payload(qr_payload)
-        except (json.JSONDecodeError, TypeError, ValueError) as e:
+        except (json.JSONDecodeError, TypeError, ValueError, KeyError) as e:
             return JsonResponse({'valid': False, 'error': f'Invalid QR code format: {str(e)}'}, status=400)
         
         # Check if token exists and is valid
@@ -581,7 +592,11 @@ def validate_token(request):
                 return JsonResponse({'valid': False, 'error': 'You have already scanned this token.'}, status=409)
             if not tokenscan_missing:
                 try:
-                    scan = TokenScan.objects.create(token=token, scanned_by=request.user)
+                    scan = TokenScan.objects.create(
+                        token=token, scanned_by=request.user,
+                        latitude=scan_coordinates[0], longitude=scan_coordinates[1],
+                        accuracy=scan_coordinates[2],
+                    )
                 except DatabaseError:
                     logging.getLogger(__name__).warning('TokenScan could not be saved; continuing without recording this scan.', exc_info=True)
                     tokenscan_missing = True

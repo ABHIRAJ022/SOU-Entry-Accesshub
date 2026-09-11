@@ -19,6 +19,7 @@ urlpatterns = [
     path('dashboard/', include('dashboard.urls')),
     path('api/', include('biometrics.urls')),
     path('api/locations/', include('dashboard.location_urls')),
+    path('api/v1/location/', include('dashboard.location_api_urls')),
     path('api/tokens/validate/', dashboard_views.validate_token, name='validate_token'),
     path('api/tokens/scan-location/', dashboard_views.assign_scan_location, name='assign_scan_location'),
 ]

@@ -11,6 +11,16 @@
 </div>
 {% if approval_status == 'approved' %}
 <form class="d-none">{% csrf_token %}</form>
+<div class="card card-body mt-3" data-location-sharing>
+  <h2 class="h5">Location sharing</h2>
+  <p class="small text-secondary">Location is never collected unless you explicitly enable sharing. Your latest position is used for campus safety features.</p>
+  <div class="d-flex gap-2 align-items-center flex-wrap">
+    <button type="button" class="btn btn-outline-primary" data-location-start>Enable Location Sharing</button>
+    <button type="button" class="btn btn-outline-secondary" data-location-stop disabled>Stop Location Sharing</button>
+    <span class="small" data-location-status role="status"></span>
+  </div>
+  <div class="small mt-2" data-location-current></div>
+</div>
 <div class="card card-body mt-3">
   <h2 class="h5">Campus token</h2>
   {% if latest_token %}
@@ -39,4 +49,4 @@
 {% endif %}
 {% if approval_status == 'approved' and token_history %}<div class="card card-body mt-3"><h2 class="h5">Token history</h2><div class="table-responsive"><table class="table table-sm align-middle mb-0"><thead><tr><th>Token ID</th><th>Created</th><th>Expires</th><th>Status</th><th>Pass</th></tr></thead><tbody>{% for token in token_history %}<tr><td class="small">{{ token.public_id }}</td><td>{{ token.created_at|localtime|date:'Y-m-d H:i' }} IST</td><td>{{ token.expires_at|localtime|date:'Y-m-d H:i' }} IST</td><td>{% if token.is_active %}<span class="badge text-bg-success">ACTIVE</span>{% else %}<span class="badge text-bg-secondary">EXPIRED</span>{% endif %}</td><td><a href="{% url 'dashboard:token_pdf' token.public_id %}" class="small">PDF</a></td></tr>{% endfor %}</tbody></table></div></div>{% endif %}
 {% endblock %}
-{% block scripts %}<script src="{% static 'js/dashboard.js' %}"></script>{% endblock %}
+{% block scripts %}<script src="{% static 'js/dashboard.js' %}"></script><script src="{% static 'js/location_sharing.js' %}"></script>{% endblock %}

@@ -4,6 +4,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   const map = L.map(element).setView([23.097214, 72.540600], 17);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 19, attribution: '&copy; OpenStreetMap contributors'}).addTo(map);
   const markers = [];
+  const liveLayer = L.layerGroup();
+  const scanLayer = L.layerGroup();
   let route;
   let locations = [];
   const message = document.querySelector('[data-map-message]');
@@ -54,6 +56,29 @@ document.addEventListener('DOMContentLoaded', async () => {
   draw(locations);
   if (locations.length) map.fitBounds(L.latLngBounds(locations.map((location) => [location.latitude, location.longitude])).pad(0.15));
   document.querySelectorAll('[data-map-filter]').forEach((button) => button.addEventListener('click', () => draw(button.dataset.mapFilter === 'ALL' ? locations : locations.filter((location) => location.category === button.dataset.mapFilter))));
+  const loadAuthorizedLayers = async () => {
+    const [usersResponse, scansResponse] = await Promise.all([
+      fetch('/api/v1/location/users/', {credentials: 'same-origin'}),
+      fetch('/api/v1/location/scans/', {credentials: 'same-origin'}),
+    ]);
+    if (usersResponse.ok) {
+      const data = await usersResponse.json();
+      (data.users || []).forEach((user) => L.circleMarker([user.latitude, user.longitude], {radius: 7, color: user.online ? '#198754' : '#6c757d'}).bindPopup(`${user.name} (${user.role})<br>Last update: ${new Date(user.recorded_at).toLocaleString()}`).addTo(liveLayer));
+    }
+    if (scansResponse.ok) {
+      const data = await scansResponse.json();
+      (data.scans || []).forEach((scan) => L.circleMarker([scan.latitude, scan.longitude], {radius: 6, color: '#fd7e14'}).bindPopup(`Token scan by ${scan.scanned_by}<br>${new Date(scan.scanned_at).toLocaleString()}`).addTo(scanLayer));
+    }
+  };
+  document.querySelector('[data-toggle-live-users]')?.addEventListener('click', (event) => {
+    if (map.hasLayer(liveLayer)) { map.removeLayer(liveLayer); event.currentTarget.textContent = 'Show live authorized users'; }
+    else { map.addLayer(liveLayer); event.currentTarget.textContent = 'Hide live authorized users'; }
+  });
+  document.querySelector('[data-toggle-scan-events]')?.addEventListener('click', (event) => {
+    if (map.hasLayer(scanLayer)) { map.removeLayer(scanLayer); event.currentTarget.textContent = 'Show token scan events'; }
+    else { map.addLayer(scanLayer); event.currentTarget.textContent = 'Hide token scan events'; }
+  });
+  loadAuthorizedLayers();
   map.on('popupopen', (event) => event.popup.getElement().querySelector('[data-route-lat]')?.addEventListener('click', () => {
     navigator.geolocation.getCurrentPosition(async (position) => {
       const start = `${position.coords.longitude},${position.coords.latitude}`; const end = `${event.popup.getElement().querySelector('[data-route-lng]').dataset.routeLng},${event.popup.getElement().querySelector('[data-route-lat]').dataset.routeLat}`;

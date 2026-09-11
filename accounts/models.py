@@ -31,6 +31,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     branch = models.ForeignKey(Branch, null=True, blank=True, on_delete=models.SET_NULL, related_name='members')
     is_email_verified = models.BooleanField(default=False); is_approved_by_admin = models.BooleanField(default=False); is_approved_by_super_admin = models.BooleanField(default=False)
     profile_photo = models.BinaryField(null=True, blank=True)
+    location_sharing_enabled = models.BooleanField(default=False)
     date_joined = models.DateTimeField(default=timezone.now); is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
     objects = UserManager()
