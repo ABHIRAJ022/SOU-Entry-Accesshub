@@ -425,6 +425,7 @@ From `config/settings.py`:
 - CSRF cookies are separate with custom name `campus_csrftoken_v2`.
 - `SESSION_COOKIE_AGE = 1800` and `SESSION_EXPIRE_AT_BROWSER_CLOSE = True`.
 - `SECURE_SSL_REDIRECT`, `SECURE_HSTS_*`, `SESSION_COOKIE_SECURE`, and `CSRF_COOKIE_SECURE` are enabled in production.
+- Authenticated sessions persist across browser restarts and remain active until the user signs out.
 - `X_FRAME_OPTIONS = 'DENY'` and `SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'`.
 - `core.middleware.SecurityHeadersMiddleware` adds `Permissions-Policy`, `Referrer-Policy`, and disables caching for HTML pages.
 

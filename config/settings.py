@@ -159,7 +159,11 @@ SECURE_HSTS_SECONDS = 31536000 if not DEBUG else 0; SECURE_HSTS_INCLUDE_SUBDOMAI
 SESSION_COOKIE_SECURE = not DEBUG; CSRF_COOKIE_SECURE = not DEBUG
 SESSION_COOKIE_HTTPONLY = True; CSRF_COOKIE_HTTPONLY = True; SESSION_COOKIE_SAMESITE = 'Lax'; CSRF_COOKIE_SAMESITE = 'Lax'
 CSRF_COOKIE_NAME = 'campus_csrftoken_v2'
-SESSION_COOKIE_AGE = 1800; SESSION_EXPIRE_AT_BROWSER_CLOSE = True
+# Keep authenticated sessions active until the user explicitly signs out.
+# Django requires a finite cookie age, so use a long-lived value instead of
+# the previous 30-minute idle timeout.
+SESSION_COOKIE_AGE = 315360000
+SESSION_EXPIRE_AT_BROWSER_CLOSE = False
 SECURE_CONTENT_TYPE_NOSNIFF = True; X_FRAME_OPTIONS = 'DENY'; SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
 CONTENT_SECURITY_POLICY = {'DIRECTIVES': {
     'default-src': ("'self'",), 'script-src': ("'self'", 'https://cdn.jsdelivr.net'),
