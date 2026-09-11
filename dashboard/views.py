@@ -28,11 +28,16 @@ def _safe_token_scans(token):
         return []
     try:
         from .models import TokenScan
-        return list(TokenScan.objects.filter(token=token).select_related('scanned_by', 'location').only(
+        scans = list(TokenScan.objects.filter(token=token).select_related('scanned_by', 'location').only(
             'id', 'token_id', 'scanned_at', 'scanned_by_id',
             'scanned_by__full_name', 'scanned_by__email',
-            'location_id', 'location__name',
+            'location_id', 'location__name', 'custom_location',
         ).order_by('-scanned_at')[:50])
+        for scan in scans:
+            scan.location_display = scan.custom_location or (
+                scan.location.name if scan.location else 'Not submitted'
+            )
+        return scans
     except Exception:
         logger = logging.getLogger(__name__)
         logger.warning('TokenScan data unavailable; skipping scan history for token %s', getattr(token, 'public_id', token.pk), exc_info=True)

@@ -15,7 +15,7 @@
         <thead><tr><th>Scanned by</th><th>Location</th><th>When</th></tr></thead>
         <tbody>
           {% for scan in token.scan_history %}
-          <tr><td>{{ scan.scanned_by.full_name }} &lt;{{ scan.scanned_by.email }}&gt;</td><td>{{ scan.custom_location|default:scan.location.name|default:'Not submitted' }}</td><td>{{ scan.scanned_at|localtime|date:'Y-m-d H:i' }} IST</td></tr>
+          <tr><td>{{ scan.scanned_by.full_name }} &lt;{{ scan.scanned_by.email }}&gt;</td><td>{{ scan.location_display }}</td><td>{{ scan.scanned_at|localtime|date:'Y-m-d H:i' }} IST</td></tr>
           {% endfor %}
         </tbody>
       </table>
