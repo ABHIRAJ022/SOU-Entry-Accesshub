@@ -5,6 +5,7 @@ import json
 import textwrap
 from functools import lru_cache
 from io import BytesIO
+from pathlib import Path
 
 import qrcode
 from django.conf import settings
@@ -20,6 +21,11 @@ INSTITUTION_LOGO_DESCRIPTION = (
     "UNIVERSITY' wordmark and 'EDUCATION TO INNOVATION' tagline, plus a gold "
     "NAAC-accredited 'A' emblem."
 )
+INSTITUTION_LOGO_PATH = Path(settings.BASE_DIR) / 'static' / 'images' / 'silver-oak-university-logo.png'
+
+
+def institution_logo_bytes():
+    return INSTITUTION_LOGO_PATH.read_bytes()
 
 
 def signed_payload(token):
@@ -90,18 +96,28 @@ def pdf_pass(token):
     width, height = A4
     document.setTitle(f'SOU Entry AccessHub Pass {token.public_id}')
     document.setFont('Helvetica-Bold', 20)
-    document.drawString(54, height - 64, 'YOUR CAMPUS TOKEN')
+    document.drawString(180, height - 64, 'SOU ENTRY ACCESSHUB')
     document.setFont('Helvetica', 10)
-    document.drawString(54, height - 82, 'Temporary campus entry pass | All times IST')
+    document.drawString(180, height - 82, 'Temporary campus entry pass | All times IST')
     document.setStrokeColorRGB(0.1, 0.25, 0.4)
     document.line(54, height - 98, width - 54, height - 98)
+    document.drawImage(
+        ImageReader(BytesIO(institution_logo_bytes())),
+        54,
+        height - 210,
+        width=100,
+        height=141,
+        preserveAspectRatio=True,
+        anchor='c',
+        mask='auto',
+    )
     document.setFont('Helvetica', 7.5)
     logo_description = textwrap.wrap(
         'Institution logo: ' + INSTITUTION_LOGO_DESCRIPTION,
-        width=145,
+        width=75,
     )
     for line_number, line in enumerate(logo_description):
-        document.drawString(54, height - 112 - (line_number * 10), line)
+        document.drawString(180, height - 112 - (line_number * 10), line)
     document.setFont('Helvetica-Bold', 12)
     document.drawString(54, height - 140, 'Visitor details' if token.guest_request_id else 'Student details')
     document.setStrokeColorRGB(0.4, 0.4, 0.4)

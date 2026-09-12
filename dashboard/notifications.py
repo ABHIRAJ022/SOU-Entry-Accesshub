@@ -1,10 +1,11 @@
 import logging
 from smtplib import SMTPException
 from django.conf import settings
-from django.core.mail import EmailMessage, send_mail
+from django.core.mail import EmailMultiAlternatives, send_mail
 from django.utils import timezone
+from email.mime.image import MIMEImage
 from .models import TokenNotification
-from .token_utils import INSTITUTION_LOGO_DESCRIPTION, pdf_pass
+from .token_utils import INSTITUTION_LOGO_DESCRIPTION, institution_logo_bytes, pdf_pass
 
 logger = logging.getLogger(__name__)
 
@@ -40,8 +41,24 @@ def send_token_created(token):
             "The signed PDF pass is attached to this email. Present the QR at campus entry and do not share this pass.\n\n"
             "If any profile information is incorrect, contact campus administration."
         )
-        message = EmailMessage(subject, body, settings.DEFAULT_FROM_EMAIL, [recipient])
+        html_body = (
+            f'<p>Hello {token.holder_name or token.user.full_name},</p>'
+            f'<p><img src="cid:sou-logo" alt="{INSTITUTION_LOGO_DESCRIPTION}" '
+            'style="max-width:420px;height:auto;"></p>'
+            f'<p><strong>Institution logo:</strong> {INSTITUTION_LOGO_DESCRIPTION}</p>'
+            f'<p>Token ID: {token.public_id}<br>'
+            f'Expires: {_ist(token.expires_at)}<br>'
+            f'Validity: {token.duration_minutes} minutes</p>'
+            '<p>The signed PDF pass is attached to this email. Present the QR at campus entry and do not share this pass.</p>'
+            '<p>If any profile information is incorrect, contact campus administration.</p>'
+        )
+        message = EmailMultiAlternatives(subject, body, settings.DEFAULT_FROM_EMAIL, [recipient])
         message.attach(f'campus-pass-{token.public_id}.pdf', pdf_pass(token), 'application/pdf')
+        logo = MIMEImage(institution_logo_bytes(), _subtype='png')
+        logo.add_header('Content-ID', '<sou-logo>')
+        logo.add_header('Content-Disposition', 'inline', filename='silver-oak-university-logo.png')
+        message.attach(logo)
+        message.attach_alternative(html_body, 'text/html')
         message.send(fail_silently=False)
     except (OSError, SMTPException):
         logger.exception('Token PDF email failed for %s', token.public_id)

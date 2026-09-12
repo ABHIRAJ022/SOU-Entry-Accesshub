@@ -308,6 +308,12 @@ class StudentDashboardTests(TestCase):
         self.assertEqual(len(mail.outbox), 1)
         self.assertEqual(mail.outbox[0].to, [student.email])
         self.assertIn('Silver Oak University logo:', mail.outbox[0].body)
+        self.assertIn('sou-logo', mail.outbox[0].alternatives[0][0])
+        self.assertTrue(any(
+            attachment.get('Content-ID') == '<sou-logo>'
+            for attachment in mail.outbox[0].message().get_payload()
+            if hasattr(attachment, 'get')
+        ))
         self.assertEqual(mail.outbox[0].attachments[0][0], f'campus-pass-{token.public_id}.pdf')
         self.assertEqual(mail.outbox[0].attachments[0][2], 'application/pdf')
 
