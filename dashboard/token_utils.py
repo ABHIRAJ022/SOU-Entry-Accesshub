@@ -97,9 +97,9 @@ def pdf_pass(token):
     document.drawImage(
         ImageReader(BytesIO(institution_logo_bytes())),
         54,
-        height - 210,
-        width=100,
-        height=141,
+        height - 94,
+        width=110,
+        height=28,
         preserveAspectRatio=True,
         anchor='c',
         mask='auto',
