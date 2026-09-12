@@ -307,6 +307,7 @@ class StudentDashboardTests(TestCase):
         send_token_created(token)
         self.assertEqual(len(mail.outbox), 1)
         self.assertEqual(mail.outbox[0].to, [student.email])
+        self.assertIn('Silver Oak University logo:', mail.outbox[0].body)
         self.assertEqual(mail.outbox[0].attachments[0][0], f'campus-pass-{token.public_id}.pdf')
         self.assertEqual(mail.outbox[0].attachments[0][2], 'application/pdf')
 
@@ -529,7 +530,17 @@ class TokenScanTests(TestCase):
         self.security2 = User.objects.create_user(email='sec2@example.com', password='pw', full_name='Sec Two', role=User.Role.SECURITY, is_active=True, is_approved_by_admin=True)
         self.security3 = User.objects.create_user(email='sec3@example.com', password='pw', full_name='Sec Three', role=User.Role.SECURITY, is_active=True, is_approved_by_admin=True)
         # create a student and issue a token for testing
-        self.student = User.objects.create_user(email='student@example.com', password='pw', full_name='Student', role=User.Role.STUDENT, is_active=True, is_approved_by_admin=True)
+        branch = Branch.objects.create(name='Security Test Branch', code='SEC-TEST')
+        self.student = User.objects.create_user(
+            email='student@example.com',
+            password='pw',
+            full_name='Student',
+            role=User.Role.STUDENT,
+            branch=branch,
+            is_active=True,
+            is_email_verified=True,
+            is_approved_by_admin=True,
+        )
         token, raw = CampusToken.issue(self.student, duration_minutes=60)
         self.token = token
 

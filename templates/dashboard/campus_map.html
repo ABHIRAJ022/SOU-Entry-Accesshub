@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
-{% block title %}Campus map | Your Campus Token{% endblock %}
+{% block title %}Campus map | SOU Entry AccessHub{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-start mb-3"><div><p class="eyebrow">Campus navigation</p><h1>Campus map</h1><p class="text-secondary">Find buildings and get a walking route from your current position.</p></div></div>
 <div class="d-flex gap-2 flex-wrap mb-3"><button data-map-filter="ALL" class="btn btn-sm btn-primary">All</button>{% for value, label in categories %}<button data-map-filter="{{ value }}" class="btn btn-sm btn-outline-secondary">{{ label }}</button>{% endfor %}</div>

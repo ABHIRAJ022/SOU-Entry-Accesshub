@@ -29,7 +29,7 @@
 		<div class="container py-2">
 			<a class="navbar-brand brand-lockup" href="/">
 				<span class="brand-mark" aria-hidden="true">S</span>
-				<span><strong>Your Live Campus Token</strong><small>Campus token control center</small></span>
+				<span><strong>SOU Entry AccessHub</strong><small>Smart Campus Entry and Visitor Management System</small></span>
 			</a>
 			<button class="navbar-toggler ms-auto" type="button" data-bs-toggle="collapse" data-bs-target="#siteNavigation" aria-controls="siteNavigation" aria-expanded="false" aria-label="Toggle navigation">
 				<span class="navbar-toggler-icon"></span>
@@ -51,7 +51,7 @@
 		{% for message in messages %}<div class="alert alert-{{ message.tags|default:'info' }} shadow-sm" role="alert">{{ message }}</div>{% endfor %}
 		{% block content %}{% endblock %}
 	</main>
-	<footer class="container footer-note">Your Campus Token <span>·</span> secure access for every arrival</footer>
+	<footer class="container footer-note">SOU Entry AccessHub <span>·</span> secure access for every arrival</footer>
 	<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
 	<script src="{% static 'js/theme.js' %}"></script>
 	<script src="{% static 'js/timezone.js' %}"></script>

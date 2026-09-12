@@ -84,7 +84,7 @@ def _verification_code(user):
     code = f'{secrets.randbelow(10000):04d}'
     user.otps.filter(used_at__isnull=True).update(used_at=timezone.now())
     EmailOTP.objects.create(user=user, code_hash=make_password(code))
-    send_mail('Your Campus Token identity verification code', f'Hello {user.full_name},\n\nYour identity verification code for Your Campus Token is:\n\n{code}\n\nThis code expires in 10 minutes and can be used only for the current verification attempt. Do not share it. If you did not request identity verification, contact your campus administrator.', settings.DEFAULT_FROM_EMAIL, [user.email], fail_silently=False)
+    send_mail('Your SOU Entry AccessHub identity verification code', f'Hello {user.full_name},\n\nYour identity verification code for SOU Entry AccessHub is:\n\n{code}\n\nThis code expires in 10 minutes and can be used only for the current verification attempt. Do not share it. If you did not request identity verification, contact your campus administrator.', settings.DEFAULT_FROM_EMAIL, [user.email], fail_silently=False)
 
 
 def has_recent_identity_verification(request):

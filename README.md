@@ -1,6 +1,6 @@
-# Your Campus Token
+# SOU Entry AccessHub
 
-Your Campus Token is a Django web application for campus access control. It supports student registration and approval, email OTP verification, live identity verification, signed QR token generation, guest visitor approval, security gate scanning, and campus map management. The project is built around a custom user model, per-role access rules, and database-backed token auditing.
+SOU Entry AccessHub is a Django web application for campus access control. It supports student registration and approval, email OTP verification, live identity verification, signed QR token generation, guest visitor approval, security gate scanning, and campus map management. The project is built around a custom user model, per-role access rules, and database-backed token auditing.
 
 ## 1. Purpose and product scope
 
@@ -1047,7 +1047,7 @@ This documentation was written from the code and configuration present in the re
 
 ## Summary
 
-Your Campus Token is a full-stack campus access solution that combines secure authentication, identity verification, token-based access validation, guest management, and administrative controls. It is designed for institutions where access must be verified, auditable, and role-aware.
+SOU Entry AccessHub is a full-stack campus access solution that combines secure authentication, identity verification, token-based access validation, guest management, and administrative controls. It is designed for institutions where access must be verified, auditable, and role-aware.
 
 ---
 

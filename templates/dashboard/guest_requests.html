@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
-{% block title %}Guest access requests | Your Campus Token{% endblock %}
+{% block title %}Guest access requests | SOU Entry AccessHub{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4"><div><p class="eyebrow">Access control</p><h1>Guest access requests</h1><p class="text-secondary mb-0">Security staff or the main administrator can approve a request.</p></div><a class="btn btn-outline-secondary" href="{% url 'dashboard:home' %}">Back to dashboard</a></div>
 <div class="card card-body"><div class="table-responsive"><table class="table align-middle mb-0"><thead><tr><th>Name</th><th>Mobile</th><th>Purpose</th><th>Submitted</th><th>Status</th></tr></thead><tbody>{% for guest in guest_requests %}<tr><td><a class="fw-semibold" href="{% url 'dashboard:guest_request_detail' guest.pk %}">{{ guest.name }}</a>{% if guest.email %}<br><small class="text-secondary">{{ guest.email }}</small>{% endif %}

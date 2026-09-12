@@ -232,7 +232,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const notify = (message, key) => {
     if (notified.has(key)) return;
     notified.add(key);
-    if ('Notification' in window && Notification.permission === 'granted') new Notification('Your Campus Token pass', {body: message});
+    if ('Notification' in window && Notification.permission === 'granted') new Notification('SOU Entry AccessHub pass', {body: message});
   };
 
   const startCountdown = (data) => {

@@ -2,6 +2,7 @@ import base64
 import hashlib
 import hmac
 import json
+import textwrap
 from functools import lru_cache
 from io import BytesIO
 
@@ -11,6 +12,14 @@ from django.utils import timezone
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
+
+
+INSTITUTION_LOGO_DESCRIPTION = (
+    "Silver Oak University logo: a green circular seal with a stylized tree and "
+    "the words 'SILVER OAK UNIVERSITY', paired with the maroon 'SILVER OAK "
+    "UNIVERSITY' wordmark and 'EDUCATION TO INNOVATION' tagline, plus a gold "
+    "NAAC-accredited 'A' emblem."
+)
 
 
 def signed_payload(token):
@@ -79,13 +88,20 @@ def pdf_pass(token):
     output = BytesIO()
     document = canvas.Canvas(output, pagesize=A4)
     width, height = A4
-    document.setTitle(f'Your Campus Token Pass {token.public_id}')
+    document.setTitle(f'SOU Entry AccessHub Pass {token.public_id}')
     document.setFont('Helvetica-Bold', 20)
     document.drawString(54, height - 64, 'YOUR CAMPUS TOKEN')
     document.setFont('Helvetica', 10)
     document.drawString(54, height - 82, 'Temporary campus entry pass | All times IST')
     document.setStrokeColorRGB(0.1, 0.25, 0.4)
     document.line(54, height - 98, width - 54, height - 98)
+    document.setFont('Helvetica', 7.5)
+    logo_description = textwrap.wrap(
+        'Institution logo: ' + INSTITUTION_LOGO_DESCRIPTION,
+        width=145,
+    )
+    for line_number, line in enumerate(logo_description):
+        document.drawString(54, height - 112 - (line_number * 10), line)
     document.setFont('Helvetica-Bold', 12)
     document.drawString(54, height - 140, 'Visitor details' if token.guest_request_id else 'Student details')
     document.setStrokeColorRGB(0.4, 0.4, 0.4)

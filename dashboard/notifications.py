@@ -4,7 +4,7 @@ from django.conf import settings
 from django.core.mail import EmailMessage, send_mail
 from django.utils import timezone
 from .models import TokenNotification
-from .token_utils import pdf_pass
+from .token_utils import INSTITUTION_LOGO_DESCRIPTION, pdf_pass
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +14,7 @@ def _ist(value):
 
 
 def send_account_approved(user):
-    subject = 'Your Live Campus Token account is approved'
+    subject = 'Your SOU Entry AccessHub account is approved'
     body = (
         f"Hello {user.full_name},\n\n"
         f"Account approved for role: {user.get_role_display()}.\n\n"
@@ -30,12 +30,13 @@ def send_token_created(token):
     if not recipient:
         return
     try:
-        subject = 'Your Live Campus Token pass is ready'
+        subject = 'Your SOU Entry AccessHub pass is ready'
         body = (
             f"Hello {token.holder_name or token.user.full_name},\n\n"
             f"Token ID: {token.public_id}\n"
             f"Expires: {_ist(token.expires_at)}\n"
             f"Validity: {token.duration_minutes} minutes\n\n"
+            f"Institution logo: {INSTITUTION_LOGO_DESCRIPTION}\n\n"
             "The signed PDF pass is attached to this email. Present the QR at campus entry and do not share this pass.\n\n"
             "If any profile information is incorrect, contact campus administration."
         )
@@ -68,7 +69,7 @@ def send_token_expiry_notice(token, kind):
             "If you did not create this pass, contact your campus administrator."
         )
         message = messages.get(kind, default_message)
-        send_mail('Your Live Campus Token pass expires soon', message, settings.DEFAULT_FROM_EMAIL, [token.user.email], fail_silently=False)
+        send_mail('Your SOU Entry AccessHub pass expires soon', message, settings.DEFAULT_FROM_EMAIL, [token.user.email], fail_silently=False)
         TokenNotification.objects.get_or_create(token=token, kind=kind)
     except (OSError, SMTPException):
         logger.exception('Token expiry email failed for %s', token.public_id)
