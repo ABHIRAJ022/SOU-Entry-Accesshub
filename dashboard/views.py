@@ -173,8 +173,7 @@ def security_dashboard(request):
     guest_requests = Paginator(GuestTokenRequest.objects.filter(
         status=GuestTokenRequest.Status.PENDING,
     ).only('id', 'name', 'purpose', 'created_at').order_by('-created_at'), 25).get_page(request.GET.get('page'))
-    locations = CampusLocation.objects.filter(is_active=True).only('id', 'name', 'category').order_by('name')
-    return render(request, 'dashboard/security.html', {'guest_requests': guest_requests, 'locations': locations})
+    return render(request, 'dashboard/security.html', {'guest_requests': guest_requests})
 
 
 def _guest_staff_required(view):
@@ -664,7 +663,7 @@ def assign_scan_location(request):
     except (json.JSONDecodeError, TypeError):
         return JsonResponse({'error': 'Invalid request.'}, status=400)
 
-    if not scan_id or (not location_id and not location_choice):
+    if not scan_id:
         return JsonResponse({'error': 'A scan and location are required.'}, status=400)
 
     from .models import TokenScan
@@ -680,6 +679,32 @@ def assign_scan_location(request):
         scan.custom_location = location_name
         scan.save(update_fields=['location', 'custom_location'])
         return JsonResponse({'saved': True, 'location': location_name})
+
+    if not location_id:
+        try:
+            from .location_service import validate_coordinates
+            latitude, longitude, accuracy = validate_coordinates(
+                payload.get('latitude'),
+                payload.get('longitude'),
+                payload.get('accuracy'),
+            )
+        except ValueError as exc:
+            return JsonResponse({
+                'error': f'Live location is required when no location is selected: {exc}',
+            }, status=400)
+        scan.location = None
+        scan.custom_location = 'Live location'
+        scan.latitude = latitude
+        scan.longitude = longitude
+        scan.accuracy = accuracy
+        scan.save(update_fields=['location', 'custom_location', 'latitude', 'longitude', 'accuracy'])
+        return JsonResponse({
+            'saved': True,
+            'location': 'Live location',
+            'latitude': latitude,
+            'longitude': longitude,
+            'accuracy': accuracy,
+        })
 
     location = get_object_or_404(CampusLocation, pk=location_id, is_active=True)
     scan.location = location

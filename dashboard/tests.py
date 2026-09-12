@@ -623,8 +623,8 @@ class TokenScanTests(TestCase):
         # App logic should treat token with >=3 scans as blocked; simulate that check
         self.assertTrue(TokenScan.objects.filter(token=self.token).count() >= 3)
 
-    def test_security_page_lists_only_active_locations(self):
-        active = CampusLocation.objects.create(
+    def test_security_page_uses_fixed_scan_location_choices(self):
+        CampusLocation.objects.create(
             name='North Gate', category=CampusLocation.Category.SECURITY_GATE,
             latitude=12, longitude=34, created_by=self.security1,
         )
@@ -634,7 +634,9 @@ class TokenScanTests(TestCase):
         )
         self.client.force_login(self.security1)
         response = self.client.get(reverse('dashboard:security'))
-        self.assertContains(response, active.name)
+        self.assertContains(response, 'VC Office')
+        self.assertContains(response, 'Other')
+        self.assertNotContains(response, 'North Gate')
         self.assertNotContains(response, 'Closed Gate')
 
     def test_security_can_assign_active_location_to_scan(self):
@@ -657,6 +659,32 @@ class TokenScanTests(TestCase):
         self.assertEqual(assignment.status_code, 200)
         scan.refresh_from_db()
         self.assertEqual(scan.location_id, location.pk)
+
+    def test_security_can_capture_live_location_when_no_choice_is_selected(self):
+        self.client.force_login(self.security1)
+        validation = self.client.post(
+            reverse('validate_token'), {'qr_payload': signed_payload(self.token)},
+            content_type='application/json', secure=True,
+        )
+        scan_id = validation.json()['scan_id']
+        assignment = self.client.post(
+            reverse('assign_scan_location'),
+            {
+                'scan_id': scan_id,
+                'location_choice': '',
+                'latitude': 23.097214,
+                'longitude': 72.541012,
+                'accuracy': 12.5,
+            },
+            content_type='application/json',
+            secure=True,
+        )
+        self.assertEqual(assignment.status_code, 200)
+        self.assertEqual(assignment.json()['location'], 'Live location')
+        scan = TokenScan.objects.get(pk=scan_id)
+        self.assertEqual(float(scan.latitude), 23.097214)
+        self.assertEqual(float(scan.longitude), 72.541012)
+        self.assertEqual(scan.custom_location, 'Live location')
 
     def test_security_cannot_assign_inactive_location_or_another_users_scan(self):
         inactive = CampusLocation.objects.create(

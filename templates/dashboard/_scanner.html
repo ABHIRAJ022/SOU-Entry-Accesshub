@@ -37,15 +37,19 @@
     <a data-scan-pdf class="btn btn-outline-secondary mt-3" target="_blank" rel="noopener">Download token PDF</a>
     <form data-scan-location-form class="mt-4" data-url="{% url 'assign_scan_location' %}">
       <label class="form-label" for="scan-location">Location</label>
-      <select id="scan-location" class="form-select" data-scan-location required>
+      <select id="scan-location" class="form-select" data-scan-location>
         <option value="">Select a location</option>
-        {% for location in locations %}<option value="{{ location.id }}">{{ location.name }}</option>{% endfor %}
         <option value="vc_office">VC Office</option>
         <option value="other">Other</option>
       </select>
+      <div class="form-text">Leave this unselected to capture the scanner's live location.</div>
       <div class="mt-3 d-none" data-custom-location-wrapper>
         <label class="form-label" for="custom-scan-location">Enter location</label>
-        <input id="custom-scan-location" class="form-control" data-custom-location maxlength="120" placeholder="e.g. Main gate, Library entrance">
+        <input id="custom-scan-location" class="form-control" data-custom-location maxlength="120" placeholder="Enter the location">
+      </div>
+      <div class="mt-3 d-none" data-live-location-wrapper>
+        <div class="small text-secondary mb-2">Live location preview</div>
+        <div data-live-location-map style="height: 220px;" aria-label="Map showing the captured live location"></div>
       </div>
       <button type="submit" class="btn btn-primary mt-3" data-scan-location-submit>Submit</button>
       <div data-scan-location-status class="mt-2" role="status" aria-live="polite"></div>

@@ -10,9 +10,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const locationSelect = document.querySelector('[data-scan-location]');
   const customLocationWrapper = document.querySelector('[data-custom-location-wrapper]');
   const customLocationInput = document.querySelector('[data-custom-location]');
+  const liveLocationWrapper = document.querySelector('[data-live-location-wrapper]');
+  const liveLocationMapElement = document.querySelector('[data-live-location-map]');
   const locationSubmit = document.querySelector('[data-scan-location-submit]');
   const locationStatus = document.querySelector('[data-scan-location-status]');
   let scanId = '';
+  let liveLocationMap;
+  let liveLocationMarker;
 
   // Field mappings
   const fields = {
@@ -277,6 +281,7 @@ document.addEventListener('DOMContentLoaded', () => {
       locationSelect.addEventListener('change', () => {
         const isOther = locationSelect.value === 'other';
         customLocationWrapper?.classList.toggle('d-none', !isOther);
+        liveLocationWrapper?.classList.toggle('d-none', Boolean(locationSelect.value));
         if (customLocationInput) {
           customLocationInput.required = isOther;
           if (!isOther) customLocationInput.value = '';
@@ -286,7 +291,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     locationForm.addEventListener('submit', async (event) => {
       event.preventDefault();
-      if (!locationSelect || !locationSelect.value || !scanId) return;
+      if (!locationSelect || !scanId) return;
       const customLocation = customLocationInput?.value.trim() || '';
       if (locationSelect.value === 'other' && !customLocation) {
         customLocationInput?.focus();
@@ -296,6 +301,34 @@ document.addEventListener('DOMContentLoaded', () => {
       locationSubmit.disabled = true;
       locationStatus.textContent = 'Saving location...';
       try {
+        let liveCoordinates = {};
+        if (!locationSelect.value) {
+          locationStatus.textContent = 'Requesting live location...';
+          liveCoordinates = await getScanLocation();
+          if (liveCoordinates.latitude == null || liveCoordinates.longitude == null) {
+            throw new Error('Live location permission is required when no location is selected.');
+          }
+          liveLocationWrapper?.classList.remove('d-none');
+          if (window.L && liveLocationMapElement) {
+            if (!liveLocationMap) {
+              liveLocationMap = L.map(liveLocationMapElement).setView(
+                [liveCoordinates.latitude, liveCoordinates.longitude],
+                17,
+              );
+              L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap contributors',
+              }).addTo(liveLocationMap);
+            } else {
+              liveLocationMap.setView([liveCoordinates.latitude, liveCoordinates.longitude], 17);
+            }
+            liveLocationMarker?.remove();
+            liveLocationMarker = L.marker([
+              liveCoordinates.latitude,
+              liveCoordinates.longitude,
+            ]).addTo(liveLocationMap);
+            liveLocationMap.invalidateSize();
+          }
+        }
         const response = await fetch(locationForm.dataset.url, {
           method: 'POST',
           credentials: 'same-origin',
@@ -308,6 +341,9 @@ document.addEventListener('DOMContentLoaded', () => {
             scan_id: scanId,
             location_choice: locationSelect.value,
             custom_location: customLocation,
+            latitude: liveCoordinates.latitude,
+            longitude: liveCoordinates.longitude,
+            accuracy: liveCoordinates.accuracy,
           }),
         });
         const data = await readJsonResponse(response);
