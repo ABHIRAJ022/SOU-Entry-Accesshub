@@ -2,7 +2,6 @@ import base64
 import hashlib
 import hmac
 import json
-import textwrap
 from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
@@ -15,12 +14,6 @@ from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
 
 
-INSTITUTION_LOGO_DESCRIPTION = (
-    "Silver Oak University logo: a green circular seal with a stylized tree and "
-    "the words 'SILVER OAK UNIVERSITY', paired with the maroon 'SILVER OAK "
-    "UNIVERSITY' wordmark and 'EDUCATION TO INNOVATION' tagline, plus a gold "
-    "NAAC-accredited 'A' emblem."
-)
 INSTITUTION_LOGO_PATH = Path(settings.BASE_DIR) / 'static' / 'images' / 'silver-oak-university-logo.png'
 
 
@@ -111,13 +104,6 @@ def pdf_pass(token):
         anchor='c',
         mask='auto',
     )
-    document.setFont('Helvetica', 7.5)
-    logo_description = textwrap.wrap(
-        'Institution logo: ' + INSTITUTION_LOGO_DESCRIPTION,
-        width=75,
-    )
-    for line_number, line in enumerate(logo_description):
-        document.drawString(180, height - 112 - (line_number * 10), line)
     document.setFont('Helvetica-Bold', 12)
     document.drawString(54, height - 140, 'Visitor details' if token.guest_request_id else 'Student details')
     document.setStrokeColorRGB(0.4, 0.4, 0.4)

@@ -307,7 +307,8 @@ class StudentDashboardTests(TestCase):
         send_token_created(token)
         self.assertEqual(len(mail.outbox), 1)
         self.assertEqual(mail.outbox[0].to, [student.email])
-        self.assertIn('Silver Oak University logo:', mail.outbox[0].body)
+        self.assertNotIn('Institution logo:', mail.outbox[0].body)
+        self.assertNotIn('green circular seal', mail.outbox[0].body)
         self.assertIn('sou-logo', mail.outbox[0].alternatives[0][0])
         self.assertTrue(any(
             attachment.get('Content-ID') == '<sou-logo>'

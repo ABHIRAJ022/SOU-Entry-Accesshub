@@ -5,7 +5,7 @@ from django.core.mail import EmailMultiAlternatives, send_mail
 from django.utils import timezone
 from email.mime.image import MIMEImage
 from .models import TokenNotification
-from .token_utils import INSTITUTION_LOGO_DESCRIPTION, institution_logo_bytes, pdf_pass
+from .token_utils import institution_logo_bytes, pdf_pass
 
 logger = logging.getLogger(__name__)
 
@@ -37,15 +37,13 @@ def send_token_created(token):
             f"Token ID: {token.public_id}\n"
             f"Expires: {_ist(token.expires_at)}\n"
             f"Validity: {token.duration_minutes} minutes\n\n"
-            f"Institution logo: {INSTITUTION_LOGO_DESCRIPTION}\n\n"
             "The signed PDF pass is attached to this email. Present the QR at campus entry and do not share this pass.\n\n"
             "If any profile information is incorrect, contact campus administration."
         )
         html_body = (
             f'<p>Hello {token.holder_name or token.user.full_name},</p>'
-            f'<p><img src="cid:sou-logo" alt="{INSTITUTION_LOGO_DESCRIPTION}" '
+            '<p><img src="cid:sou-logo" alt="Silver Oak University logo" '
             'style="max-width:420px;height:auto;"></p>'
-            f'<p><strong>Institution logo:</strong> {INSTITUTION_LOGO_DESCRIPTION}</p>'
             f'<p>Token ID: {token.public_id}<br>'
             f'Expires: {_ist(token.expires_at)}<br>'
             f'Validity: {token.duration_minutes} minutes</p>'
