@@ -91,7 +91,7 @@ def pdf_pass(token):
     document.setFont('Helvetica-Bold', 20)
     document.drawString(180, height - 64, 'SOU ENTRY ACCESSHUB')
     document.setFont('Helvetica', 10)
-    document.drawString(180, height - 82, 'Temporary campus entry pass | All times IST')
+    document.drawString(180, height - 82, 'Smart Campus Entry and Visitor Management System')
     document.setStrokeColorRGB(0.1, 0.25, 0.4)
     document.line(54, height - 98, width - 54, height - 98)
     document.drawImage(
