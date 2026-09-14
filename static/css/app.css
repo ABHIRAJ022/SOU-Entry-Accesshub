@@ -30,10 +30,18 @@ body {
 }
 
 body::before {
-	background: radial-gradient(circle at 85% 8%, rgba(240, 140, 70, .18), transparent 30%), linear-gradient(135deg, #f8fbfa 0%, #e7f0f1 100%);
+	background-color: #edf4f5;
+	background-image: url('../images/logo.png');
+	background-position: center;
+	background-repeat: no-repeat;
+	background-size: cover;
 	content: '';
-	inset: 0;
+	height: 100vh;
+	left: 0;
+	opacity: .3;
+	top: 0;
 	position: fixed;
+	width: 100vw;
 	z-index: -2;
 }
 
@@ -96,12 +104,30 @@ body::before {
 	line-height: 1.1;
 }
 
+.brand-university-logo {
+	height: 34px;
+	object-fit: contain;
+	width: 138px;
+}
+
+.brand-title-group {
+	min-width: 0;
+}
+
 .brand-lockup small {
 	color: var(--campus-muted);
 	display: block;
 	font-size: .68rem;
 	font-weight: 500;
 	margin-top: .25rem;
+}
+
+.brand-logo {
+	height: 1.35em;
+	margin-right: .15rem;
+	object-fit: contain;
+	vertical-align: -.2em;
+	width: 1.35em;
 }
 
 .brand-mark {
@@ -207,6 +233,55 @@ canvas {
 .scanner-status,
 .scanner-controls {
 	max-width: 100%;
+}
+
+.scanner-card {
+	background: #b7bec5;
+}
+
+.scanner-layout {
+	align-items: stretch;
+	display: grid;
+	grid-template-columns: minmax(120px, 1fr) minmax(260px, 1.35fr) minmax(120px, 1fr);
+	min-height: 320px;
+}
+
+.scanner-logo-panel {
+	align-items: center;
+	background: #b7bec5;
+	display: flex;
+	justify-content: center;
+	min-width: 0;
+	padding: clamp(.75rem, 3vw, 2rem);
+}
+
+.scanner-logo-panel img {
+	height: 100%;
+	max-height: 220px;
+	object-fit: contain;
+	width: 100%;
+}
+
+.scanner-viewport {
+	aspect-ratio: 1;
+	background: #111827;
+	max-width: min(100%, 520px);
+	overflow: hidden;
+	position: relative;
+	width: 100%;
+}
+
+#qr-reader {
+	height: 100%;
+	width: 100%;
+}
+
+.scanner-viewport video,
+.scanner-viewport canvas {
+	height: 100% !important;
+	max-width: none;
+	object-fit: cover;
+	width: 100% !important;
 }
 
 .camera-stage {
@@ -375,7 +450,8 @@ canvas {
 }
 
 [data-bs-theme="dark"] body::before {
-	background: radial-gradient(circle at 85% 8%, rgba(240, 140, 70, .13), transparent 30%), linear-gradient(135deg, #11283a 0%, #0e1b2a 100%);
+	background-color: #0e1b2a;
+	background-image: url('../images/logo.png');
 }
 
 [data-bs-theme="dark"] .site-nav {
@@ -409,10 +485,9 @@ canvas {
 		max-width: calc(100% - 3.5rem);
 	}
 
-	.brand-mark {
-		flex: 0 0 34px;
-		height: 34px;
-		width: 34px;
+	.brand-university-logo {
+		height: 28px;
+		width: 96px;
 	}
 
 	.brand-lockup strong {
@@ -459,6 +534,20 @@ canvas {
 
 	.theme-button span:last-child {
 		display: none;
+	}
+
+	.scanner-layout {
+		grid-template-columns: 1fr 1fr;
+	}
+
+	.scanner-viewport {
+		grid-column: 1 / -1;
+		grid-row: 1;
+		justify-self: center;
+	}
+
+	.scanner-logo-panel {
+		min-height: 110px;
 	}
 
 	.page-shell {

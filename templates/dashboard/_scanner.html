@@ -1,3 +1,5 @@
+{% load static %}
+
 <section class="mb-4">
   <h2 class="h4">Campus verification gate scanner</h2>
   <p class="text-secondary">Scan a signed QR pass once at the gate. Used or expired passes are rejected.</p>
@@ -10,8 +12,18 @@
   </div>
 
   <div class="card mb-4 shadow-sm overflow-hidden">
-    <div class="card-body p-0 position-relative" style="min-height: 300px; background-color: #eaeaea;">
-      <div id="qr-reader" style="width: 100%; min-height: 300px;"></div>
+    <div class="card-body p-0 position-relative scanner-card">
+      <div class="scanner-layout">
+        <aside class="scanner-logo-panel" aria-label="SOU Entry AccessHub">
+          <img src="{% static 'images/logo.png' %}" alt="SOU Entry AccessHub">
+        </aside>
+        <div id="reader" class="scanner-viewport">
+          <div id="qr-reader"></div>
+        </div>
+        <aside class="scanner-logo-panel" aria-label="SOU Entry AccessHub">
+          <img src="{% static 'images/logo.png' %}" alt="SOU Entry AccessHub">
+        </aside>
+      </div>
       <div id="scan-result" data-scan-result class="scanner-status position-absolute bottom-0 start-0 w-100 bg-dark text-white p-2 text-center opacity-75" role="status" aria-live="assertive">Scanner closed.</div>
     </div>
   </div>

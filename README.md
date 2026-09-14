@@ -1054,3 +1054,115 @@ SOU Entry AccessHub is a full-stack campus access solution that combines secure 
 ## License
 
 This project is intended for academic or institutional deployment and is distributed as a local project repository. Update this section with your project's actual license if neededThis project is intended for academic or institutional deployment and is distributed as a local project repository. Update this section with your project's actual license if needed.
+
+---
+
+## Append-only product update (14 September 2026)
+
+This section is an additive update to the documentation above. All previously documented README content has been retained unchanged.
+
+### Current feature set
+
+SOU Entry AccessHub currently provides:
+
+- Role-based access for students, branch administrators, super administrators, and security staff.
+- Email/password authentication with email OTP verification and optional Google OAuth.
+- Branch-aware approval workflows for students, administrators, and security staff.
+- Student profile management with enrollment, phone, branch, and profile-photo data.
+- Live webcam capture for student identity verification, guest requests, and token issuance.
+- Security PIN and emergency OTP options for identity verification.
+- Signed, time-limited QR campus tokens with PDF pass downloads.
+- Token lifecycle controls: generation numbers, one active token per student, daily issuance limits, expiry, cancellation, and one-time validation.
+- Token status and countdown displays, token history, and token-expiry notifications.
+- Guest and visitor access requests with purpose, gender, contact information, live photo, approval status, and configurable validity.
+- Main-administrator escalation for repeat guest requests associated with an existing mobile number.
+- Security-gate QR scanning with holder details, token status, and scan audit records.
+- Campus location management with categories, descriptions, building codes, coordinates, activation/deactivation, and map markers.
+- Walking directions from the user's current location through the OSRM routing service.
+- Explicit, user-controlled location sharing with start/stop controls, latest-position storage, location history, accuracy metadata, and campus geofencing.
+- Authorized-user live location and token-scan event layers for permitted admin and security users.
+- Audit logging and exportable CSV, XLSX, and JSON reports for operational review.
+- Health monitoring, SEO endpoints, CSRF protection, security headers, rate limiting, and production HTTPS controls.
+
+### UI/UX updates and behavior
+
+The current interface is a responsive, server-rendered Bootstrap experience with the following UX improvements:
+
+- A shared responsive navigation shell with SOU Entry AccessHub branding, profile access, sign-out, system-health status, theme control, and auto-reload control.
+- Mobile-friendly layouts with responsive tables, flexible action groups, constrained media, and horizontal overflow handling for dense dashboard data.
+- Light and dark themes persisted in browser local storage.
+- A persistent health badge that reports operational, degraded, or offline service status without blocking the page.
+- Optional dashboard auto-reload, enabled by default and persisted per browser, with a visible ON/OFF control.
+- Clear role-specific entry points for students, administrators, security staff, and visitors.
+- Inline status badges for email verification, approval, token state, guest-request state, online location state, and scan results.
+- Accessible live regions and status messaging for camera state, location permission, token generation, validation errors, and map operations.
+- Student token creation UX with camera enablement, live-photo capture, preview, validity selection from 30 minutes to 8 hours, QR display, countdown, PDF download, and token history.
+- Security scanner UX using browser camera access, clear success/error feedback, and guest-request shortcuts.
+- Guest request UX with live-photo capture and review-oriented request detail pages.
+- Campus map UX with category filters, marker popups, route-to-location actions, admin coordinate entry, draggable admin markers, and deactivation controls.
+- Explicit location-sharing consent: location is not started until the user chooses to enable it, and the UI provides a stop control.
+- Progressive enhancement through small JavaScript modules rather than a separate SPA; core pages remain Django-template rendered.
+- Responsive camera and image handling for webcam, QR, profile, token, and guest-photo surfaces.
+- SEO metadata, canonical links, Open Graph/Twitter metadata, structured data, `robots.txt`, and `sitemap.xml`.
+
+### Backend and API updates
+
+The backend now includes explicit location and scan APIs in addition to the previously documented account, dashboard, token, biometric, reporting, and map endpoints.
+
+#### Location sharing API
+
+All `/api/v1/location/` endpoints require an authenticated session:
+
+| Method | Endpoint | Access | Purpose |
+| --- | --- | --- | --- |
+| `GET` | `/api/v1/location/me/` | Any authenticated user | Return sharing state, online state, and latest shared position |
+| `POST` | `/api/v1/location/start/` | Any authenticated user | Enable explicit location sharing |
+| `POST` | `/api/v1/location/stop/` | Any authenticated user | Disable location sharing |
+| `POST` | `/api/v1/location/update/` | Sharing-enabled user | Validate and record a location update |
+| `GET` | `/api/v1/location/history/` | User; admin/security for other users | Return bounded location history |
+| `GET` | `/api/v1/location/users/` | Admin or security | Return users who have enabled sharing and their online state |
+| `GET` | `/api/v1/location/scans/` | Admin or security | Return location-aware token scan events |
+
+Location safeguards include coordinate and accuracy validation, ISO-8601 timestamp validation, a 16 KB request limit, per-user update rate limiting, a configurable online threshold, and configurable campus geofence coordinates/radius.
+
+#### Token scan and location-aware access records
+
+`TokenScan` records the token, scanning security user, optional campus location, optional custom location, latitude, longitude, accuracy, and scan timestamp. A database uniqueness rule prevents the same security user from recording duplicate scans for the same token. Token scan history is available to authorized token-history and map views.
+
+#### Updated data models
+
+The backend now also includes:
+
+- `UserLocation` for the latest explicitly shared location per user.
+- `LocationHistory` for timestamped location records with indexed user/time queries.
+- `TokenScan` for security scan history and location-aware auditability.
+- `LocationCategory` for reusable campus location categories.
+- Additional dashboard migrations for location tracking, scan locations, custom scan locations, and related indexes.
+
+#### Backend reliability and security details
+
+- Role checks are applied at both page and JSON endpoint boundaries.
+- CSRF tokens are sent with browser-side state-changing requests.
+- JSON payload sizes and numeric/date inputs are validated before persistence.
+- Location history access is limited when a target user has disabled sharing.
+- Expired student tokens are revoked during dashboard/token lifecycle operations.
+- Audit and scan data are ordered for recent-first operational review.
+- Sensitive HTML responses use the application's security middleware and cache controls.
+
+### Current frontend/backend integration map
+
+| User action | UI surface | Backend integration |
+| --- | --- | --- |
+| Sign in or register | Account forms | Django auth, OTP, role and approval checks |
+| Verify identity | Webcam verification page | `/api/verify-identity/`, `IdentityVerification` |
+| Generate a student pass | Student dashboard | `/dashboard/tokens/generate/`, `CampusToken`, `TokenAudit` |
+| Scan a pass | Security dashboard | `/api/tokens/validate/`, `TokenScan` |
+| Request visitor access | Guest request form | `GuestTokenRequest` and approval endpoints |
+| Find a campus building | Campus map | `/api/locations/`, Leaflet, OSRM |
+| Share current position | Student location card | `/api/v1/location/start/`, `update/`, and `stop/` |
+| Review authorized activity | Map live layers | `/api/v1/location/users/` and `/api/v1/location/scans/` |
+| Monitor service state | Shared navigation bar | `/api/health/` |
+
+### Documentation maintenance note
+
+The repository's implementation remains Django template based and does not introduce a separate React/Vue frontend, an AI/ML provider, Docker deployment, or a new API gateway. This addendum documents the currently implemented UI/UX and backend behavior without changing the earlier README sections.
