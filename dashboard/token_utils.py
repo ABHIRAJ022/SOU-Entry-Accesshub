@@ -15,10 +15,15 @@ from reportlab.pdfgen import canvas
 
 
 INSTITUTION_LOGO_PATH = Path(settings.BASE_DIR) / 'static' / 'images' / 'silver-oak-university-logo.png'
+ACCESSHUB_LOGO_PATH = Path(settings.BASE_DIR) / 'static' / 'images' / 'logo.png'
 
 
 def institution_logo_bytes():
     return INSTITUTION_LOGO_PATH.read_bytes()
+
+
+def accesshub_logo_bytes():
+    return ACCESSHUB_LOGO_PATH.read_bytes()
 
 
 def signed_payload(token):
@@ -100,6 +105,16 @@ def pdf_pass(token):
         height - 94,
         width=110,
         height=28,
+        preserveAspectRatio=True,
+        anchor='c',
+        mask='auto',
+    )
+    document.drawImage(
+        ImageReader(BytesIO(accesshub_logo_bytes())),
+        width - 110,
+        height - 104,
+        width=56,
+        height=42,
         preserveAspectRatio=True,
         anchor='c',
         mask='auto',
