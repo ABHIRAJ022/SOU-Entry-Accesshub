@@ -5,7 +5,30 @@ from django.db import connection
 from django.db.utils import DatabaseError, OperationalError, ProgrammingError
 from django import forms
 
-from .models import CampusLocation, CampusToken, GuestTokenRequest, LocationCategory, TokenAudit, TokenNotification, TokenScan
+from .models import CampusLocation, CampusToken, GuestTokenRequest, LocationCategory, SecurityDevice, TokenAudit, TokenNotification, TokenScan
+
+
+class SecurityDeviceAdminForm(forms.ModelForm):
+    credential = forms.CharField(required=False, widget=forms.PasswordInput(render_value=False), help_text='Set or rotate the device credential. It is stored hashed.')
+
+    class Meta:
+        model = SecurityDevice
+        exclude = ('credential_hash',)
+
+
+@admin.register(SecurityDevice)
+class SecurityDeviceAdmin(admin.ModelAdmin):
+    form = SecurityDeviceAdminForm
+    list_display = ('device_id', 'name', 'gate', 'campus_location', 'status', 'last_seen')
+    list_filter = ('status', 'campus_location')
+    search_fields = ('device_id', 'name', 'gate')
+    filter_horizontal = ('assigned_security_staff',)
+
+    def save_model(self, request, obj, form, change):
+        credential = form.cleaned_data.get('credential')
+        if credential:
+            obj.set_credential(credential)
+        super().save_model(request, obj, form, change)
 
 
 def _token_scan_table_available():

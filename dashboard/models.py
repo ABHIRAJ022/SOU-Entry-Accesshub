@@ -157,6 +157,52 @@ class CampusLocation(models.Model):
         return dict(self.Category.choices).get(self.category, self.category.replace('_', ' ').title())
 
 
+class SecurityDevice(models.Model):
+    class Status(models.TextChoices):
+        ACTIVE = 'ACTIVE', 'Active'
+        DISABLED = 'DISABLED', 'Disabled'
+        MAINTENANCE = 'MAINTENANCE', 'Maintenance'
+
+    device_id = models.CharField(max_length=80, unique=True)
+    name = models.CharField(max_length=120)
+    gate = models.CharField(max_length=120)
+    campus_location = models.ForeignKey(
+        CampusLocation, on_delete=models.PROTECT, related_name='security_devices'
+    )
+    building = models.CharField(max_length=120, blank=True)
+    access_zone = models.CharField(max_length=120, blank=True)
+    assigned_security_staff = models.ManyToManyField(
+        settings.AUTH_USER_MODEL, blank=True, related_name='security_devices'
+    )
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.ACTIVE)
+    credential_hash = models.CharField(max_length=128, blank=True)
+    last_seen = models.DateTimeField(null=True, blank=True)
+    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    allowed_radius_meters = models.PositiveIntegerField(default=150)
+
+    def set_credential(self, credential):
+        from django.contrib.auth.hashers import make_password
+        self.credential_hash = make_password(credential)
+
+    def check_credential(self, credential):
+        from django.contrib.auth.hashers import check_password
+        return bool(self.credential_hash and check_password(credential, self.credential_hash))
+
+    def verify_position(self, latitude, longitude):
+        if latitude is None or longitude is None:
+            return 'not_provided'
+        from .location_service import distance_meters
+        if self.latitude is None or self.longitude is None:
+            return 'unconfigured'
+        return 'verified' if distance_meters(
+            latitude, longitude, self.latitude, self.longitude
+        ) <= self.allowed_radius_meters else 'failed'
+
+    def __str__(self):
+        return f'{self.name} ({self.device_id})'
+
+
 class LocationCategory(models.Model):
     code = models.CharField(max_length=50, unique=True)
     name = models.CharField(max_length=80, unique=True)
@@ -189,11 +235,16 @@ class TokenScan(models.Model):
     """
     token = models.ForeignKey(CampusToken, on_delete=models.CASCADE, related_name='scans')
     scanned_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='token_scans')
+    device = models.ForeignKey(SecurityDevice, null=True, blank=True, on_delete=models.PROTECT, related_name='token_scans')
     location = models.ForeignKey(CampusLocation, null=True, blank=True, on_delete=models.PROTECT, related_name='token_scans')
     custom_location = models.CharField(max_length=120, blank=True)
+    resolved_gate = models.CharField(max_length=120, blank=True)
+    resolved_building = models.CharField(max_length=120, blank=True)
+    resolved_access_zone = models.CharField(max_length=120, blank=True)
     latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     accuracy = models.FloatField(null=True, blank=True)
+    gps_status = models.CharField(max_length=16, default='not_provided')
     scanned_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

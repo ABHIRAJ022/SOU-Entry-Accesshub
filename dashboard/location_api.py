@@ -1,8 +1,8 @@
 import json
+from functools import wraps
 from datetime import timedelta
 
 from django.conf import settings
-from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -16,6 +16,23 @@ from .models import LocationHistory, TokenScan, UserLocation
 MAX_BODY = 16 * 1024
 
 
+def location_auth(view):
+    @wraps(view)
+    def wrapped(request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            authorization = request.headers.get('Authorization', '')
+            token = authorization[7:] if authorization.startswith('Bearer ') else request.headers.get('X-Location-Token')
+            if token:
+                user = User.objects.filter(is_active=True).only(
+                    'id', 'mobile_location_token_hash', 'role', 'location_sharing_enabled'
+                )
+                request.user = next((candidate for candidate in user if candidate.check_mobile_location_token(token)), None)
+        if not request.user or not request.user.is_authenticated:
+            return JsonResponse({'error': 'Authentication required.'}, status=401)
+        return view(request, *args, **kwargs)
+    return wrapped
+
+
 def _role_allowed(request, *roles):
     return request.user.is_superuser or request.user.role in roles
 
@@ -27,7 +44,7 @@ def _location_json(location):
     }
 
 
-@login_required
+@location_auth
 @require_GET
 def me(request):
     location = UserLocation.objects.filter(user=request.user).first()
@@ -40,7 +57,7 @@ def me(request):
     })
 
 
-@login_required
+@location_auth
 @require_POST
 def update(request):
     if request.META.get('CONTENT_LENGTH') and int(request.META['CONTENT_LENGTH']) > MAX_BODY:
@@ -60,7 +77,7 @@ def update(request):
     return JsonResponse({'location': _location_json(location), 'inside_campus': is_inside_campus(location.latitude, location.longitude)})
 
 
-@login_required
+@location_auth
 @require_POST
 def start(request):
     request.user.location_sharing_enabled = True
@@ -68,7 +85,7 @@ def start(request):
     return JsonResponse({'sharing_enabled': True})
 
 
-@login_required
+@location_auth
 @require_POST
 def stop(request):
     request.user.location_sharing_enabled = False
@@ -76,7 +93,7 @@ def stop(request):
     return JsonResponse({'sharing_enabled': False})
 
 
-@login_required
+@location_auth
 @require_GET
 def history(request):
     target = request.user
@@ -95,7 +112,7 @@ def history(request):
     return JsonResponse({'history': [_location_json(row) for row in rows]})
 
 
-@login_required
+@location_auth
 @require_GET
 def users(request):
     if not _role_allowed(request, User.Role.ADMIN, User.Role.SECURITY):
@@ -108,7 +125,7 @@ def users(request):
     } for row in rows]})
 
 
-@login_required
+@location_auth
 @require_GET
 def scans(request):
     if not _role_allowed(request, User.Role.ADMIN, User.Role.SECURITY):

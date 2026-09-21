@@ -1,6 +1,7 @@
 from datetime import timedelta
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
 from django.contrib.auth.hashers import check_password, make_password
+import secrets
 from django.db import models
 from django.utils import timezone
 from .managers import UserManager
@@ -32,6 +33,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     is_email_verified = models.BooleanField(default=False); is_approved_by_admin = models.BooleanField(default=False); is_approved_by_super_admin = models.BooleanField(default=False)
     profile_photo = models.BinaryField(null=True, blank=True)
     location_sharing_enabled = models.BooleanField(default=False)
+    mobile_location_token_hash = models.CharField(max_length=128, blank=True)
     date_joined = models.DateTimeField(default=timezone.now); is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
     objects = UserManager()
@@ -39,6 +41,15 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
+
+    def issue_mobile_location_token(self):
+        token = secrets.token_urlsafe(32)
+        self.mobile_location_token_hash = make_password(token)
+        self.save(update_fields=['mobile_location_token_hash'])
+        return token
+
+    def check_mobile_location_token(self, token):
+        return bool(token and self.mobile_location_token_hash and check_password(token, self.mobile_location_token_hash))
 
     @property
     def can_login(self):

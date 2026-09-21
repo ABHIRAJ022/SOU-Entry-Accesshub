@@ -17,8 +17,9 @@ from biometrics.snapshots import SnapshotError, process_webcam_snapshot
 from accounts.models import User
 from .models import CampusToken, GuestTokenRequest, TokenAudit
 from .token_utils import pdf_pass, qr_data_url, qr_png, signed_payload, token_from_signed_payload
-from .models import CampusLocation, LocationCategory
+from .models import CampusLocation, LocationCategory, SecurityDevice
 from .notifications import send_account_approved, send_token_created, send_token_expiry_notice
+from core.notifications import emit_event
 
 TOKEN_DURATIONS = {30, 60, 120, 180, 240, 300, 360, 420, 480}
 
@@ -165,6 +166,7 @@ def cancel_token(request, token_id):
             token.guest_request.approved_by = request.user
             token.guest_request.approved_at = timezone.now()
             token.guest_request.save(update_fields=['status', 'approved_by', 'approved_at', 'updated_at'])
+        emit_event('token_revoked', user=token.user, payload={'token_id': str(token.public_id)}, roles=('user', 'admins'))
         return JsonResponse({'status': 'cancelled'})
     return JsonResponse({'error': 'Only a live, unused token can be cancelled.'}, status=409)
 
@@ -268,6 +270,8 @@ def approve_guest_request(request, request_id):
     guest.save(update_fields=['status', 'approved_by', 'approved_at', 'updated_at'])
     messages.success(request, f'Temporary token created for {guest.name}: {raw_token}')
     send_token_created(token)
+    emit_event('token_created', user=request.user, payload={'token_id': str(token.public_id)}, roles=('user', 'admins'))
+    emit_event('guest_request_approved', user=None, payload={'request_id': str(guest.pk), 'token_id': str(token.public_id)}, roles=('admins', 'security'))
     return redirect('dashboard:guest_request_detail', request_id=guest.pk)
 
 
@@ -280,6 +284,7 @@ def reject_guest_request(request, request_id):
         guest.approved_by = request.user
         guest.approved_at = timezone.now()
         guest.save(update_fields=['status', 'approved_by', 'approved_at', 'updated_at'])
+        emit_event('guest_request_rejected', user=None, payload={'request_id': str(guest.pk)}, roles=('admins', 'security'))
     return redirect('dashboard:guest_requests')
 
 @require_POST
@@ -295,6 +300,7 @@ def approve_user(request, user_id):
         user.save(update_fields=['is_approved_by_admin', 'is_active'])
         if action == 'approve':
             send_account_approved(user)
+        emit_event(f'user_{action}', user=user, payload={'user_id': str(user.pk), 'role': user.role}, roles=('user', 'admins'))
         return JsonResponse({'status': 'approved' if action == 'approve' else ('revoked' if action == 'revoke' else 'rejected')})
     if user.role in {User.Role.ADMIN, User.Role.SECURITY} and request.user.is_superuser:
         user.is_approved_by_super_admin = action == 'approve'
@@ -302,6 +308,7 @@ def approve_user(request, user_id):
         user.save(update_fields=['is_approved_by_super_admin', 'is_active'])
         if action == 'approve':
             send_account_approved(user)
+        emit_event(f'user_{action}', user=user, payload={'user_id': str(user.pk), 'role': user.role}, roles=('user', 'admins'))
         return JsonResponse({'status': 'approved' if action == 'approve' else ('revoked' if action == 'revoke' else 'rejected')})
     return JsonResponse({'error': 'Only the main super administrator can manage staff accounts.'}, status=403)
 
@@ -536,6 +543,17 @@ def validate_token(request):
                 scan_coordinates = validate_coordinates(
                     payload.get('latitude'), payload.get('longitude'), payload.get('accuracy')
                 )
+            device = None
+            device_id = payload.get('device_id')
+            device_credential = payload.get('device_credential')
+            if device_id:
+                device = SecurityDevice.objects.filter(device_id=device_id).first()
+                if not device or device.status != SecurityDevice.Status.ACTIVE:
+                    return JsonResponse({'valid': False, 'error': 'Security device is unavailable.'}, status=403)
+                if not device.check_credential(device_credential or ''):
+                    return JsonResponse({'valid': False, 'error': 'Invalid security device credentials.'}, status=403)
+                if not device.assigned_security_staff.filter(pk=request.user.pk).exists() and not request.user.is_superuser:
+                    return JsonResponse({'valid': False, 'error': 'Security user is not assigned to this device.'}, status=403)
             token = token_from_signed_payload(qr_payload)
         except (json.JSONDecodeError, TypeError, ValueError, KeyError) as e:
             return JsonResponse({'valid': False, 'error': f'Invalid QR code format: {str(e)}'}, status=400)
@@ -593,9 +611,23 @@ def validate_token(request):
                 try:
                     scan = TokenScan.objects.create(
                         token=token, scanned_by=request.user,
+                        device=device,
+                        location=device.campus_location if device else None,
+                        resolved_gate=device.gate if device else '',
+                        resolved_building=device.building if device else '',
+                        resolved_access_zone=device.access_zone if device else '',
                         latitude=scan_coordinates[0], longitude=scan_coordinates[1],
                         accuracy=scan_coordinates[2],
+                        gps_status=device.verify_position(*scan_coordinates[:2]) if device else 'not_provided',
                     )
+                    if device:
+                        device.last_seen = timezone.now()
+                        device.save(update_fields=['last_seen'])
+                    emit_event('token_scan', user=None, payload={
+                        'token_id': str(token.public_id), 'scan_id': str(scan.pk),
+                        'device_id': device.device_id if device else None,
+                        'gps_status': scan.gps_status,
+                    }, roles=('admins', 'security'))
                 except DatabaseError:
                     logging.getLogger(__name__).warning('TokenScan could not be saved; continuing without recording this scan.', exc_info=True)
                     tokenscan_missing = True

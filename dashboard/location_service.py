@@ -8,6 +8,16 @@ from django.utils import timezone
 from .models import LocationHistory, UserLocation
 
 
+def distance_meters(latitude_a, longitude_a, latitude_b, longitude_b):
+    latitude_a, longitude_a, _ = validate_coordinates(latitude_a, longitude_a)
+    latitude_b, longitude_b, _ = validate_coordinates(latitude_b, longitude_b)
+    earth_radius = 6371000
+    dlat = radians(latitude_b - latitude_a)
+    dlng = radians(longitude_b - longitude_a)
+    a = sin(dlat / 2) ** 2 + cos(radians(latitude_a)) * cos(radians(latitude_b)) * sin(dlng / 2) ** 2
+    return 2 * earth_radius * asin(sqrt(a))
+
+
 def validate_coordinates(latitude, longitude, accuracy=None):
     try:
         latitude = float(latitude)
@@ -40,6 +50,11 @@ def parse_recorded_at(value):
 def record_location(user, latitude, longitude, accuracy=None, recorded_at=None):
     latitude, longitude, accuracy = validate_coordinates(latitude, longitude, accuracy)
     recorded_at = parse_recorded_at(recorded_at)
+    latest = UserLocation.objects.filter(user=user).first()
+    duplicate_window = timedelta(seconds=getattr(settings, 'LOCATION_DUPLICATE_WINDOW_SECONDS', 45))
+    if latest and latest.recorded_at >= recorded_at - duplicate_window:
+        if abs(float(latest.latitude) - latitude) < 0.000001 and abs(float(latest.longitude) - longitude) < 0.000001:
+            return latest
     LocationHistory.objects.create(
         user=user, latitude=latitude, longitude=longitude,
         accuracy=accuracy, recorded_at=recorded_at,
